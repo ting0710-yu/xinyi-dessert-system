@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#6f4e37">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>信義店記帳</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        coffee: { 50:'#fdf8f6', 100:'#f2e8e5', 200:'#eaddd7', 500:'#a67c52', 600:'#8b5a3b', 700:'#6f4e37', 800:'#4a3b32', 900:'#3e312b' },
+                        beige: { 100:'#f5f5dc', 200:'#efebd4' }
+                    },
+                    boxShadow: { 'top': '0 -4px 6px -1px rgba(0, 0, 0, 0.1)' },
+                    zIndex: { '60': '60', '70': '70' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; -webkit-tap-highlight-color: transparent; }
+        .tab-active { color: #6f4e37; font-weight: bold; }
+        .tab-inactive { color: #9ca3af; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .fade-in { animation: fadeIn 0.3s ease-out; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 100; display: flex; justify-content: center; align-items: center; flex-direction: column; gap: 15px; }
+        .spinner { width: 40px; height: 40px; border: 4px solid #eaddd7; border-top: 4px solid #6f4e37; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+        .calendar-cell { min-height: 100px; background: white; border: 1px solid #e7e5e4; padding: 4px; display: flex; flex-direction: column; gap: 2px; position: relative; cursor: pointer; transition: background 0.2s; border-radius: 4px; }
+        .calendar-cell:active { background-color: #f5f5f4; border-color: #d6d3d1; }
+        
+        .shift-row { font-size: 11px; display: flex; align-items: center; gap: 4px; margin-bottom: 3px; overflow: hidden; white-space: nowrap; background: #fafaf9; border-radius: 6px; padding: 2px 4px; border: 1px solid #f5f5f4; }
+        .shift-label { font-weight: bold; color: #78716c; font-size: 11px; flex-shrink: 0; }
+        .emp-name { font-weight: 700; font-size: 11px; text-shadow: 0 0 1px rgba(0,0,0,0.05); }
+        
+        .day-number { font-size: 12px; font-weight: bold; color: #78716c; margin-bottom: 4px; text-align: center; }
+        .holiday-tag { font-size: 9px; background: #fee2e2; color: #ef4444; border-radius: 4px; padding: 0 3px; margin-left: 2px; display: inline-block; font-weight: normal; }
+        .chk-btn:checked + label { background-color: #6f4e37; color: white; border-color: #6f4e37; }
+        .notice-card { border-left: 4px solid #a67c52; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 8px; }
+        .notice-card.high { border-left-color: #ef4444; }
+        .notice-card.normal { border-left-color: #3b82f6; }
+    </style>
+</head>
+<body class="bg-[#f8f6f4] text-coffee-900 h-screen overflow-hidden flex flex-col">
+
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div class="text-coffee-800 font-bold text-sm tracking-wide">系統連線中...</div>
+    </div>
+
+    <header class="bg-coffee-700 text-white pt-safe-top pb-3 px-4 shadow-md z-20 shrink-0">
+        <div class="flex justify-between items-center pt-2">
+            <h1 class="text-lg font-bold flex items-center gap-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-4.5-6c-2 0-4 2-5 4"/></svg>
+                信義店記帳
+            </h1>
+            <input type="month" id="month-select" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded px-2 py-1 outline-none focus:ring-1 focus:ring-orange-300">
+        </div>
+    </header>
+
+    <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 hide-scrollbar relative">
+        
+        <!-- 1. Home Tab -->
+        <div id="view-home" class="fade-in space-y-4">
+            
+            <!-- 公告區 -->
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="font-bold text-coffee-800 text-sm flex items-center gap-1"><span class="text-lg">📢</span> 店鋪公告</h3>
+                    <button onclick="addNotice()" class="text-xs bg-coffee-100 text-coffee-700 px-2 py-1 rounded font-bold hover:bg-coffee-200">+ 發布</button>
+                </div>
+                <div id="notice-list" class="space-y-2"></div>
+                <div id="notice-empty" class="text-xs text-stone-400 text-center py-2">尚無公告</div>
+            </div>
+
+            <!-- Dashboard -->
+            <div class="flex gap-3 overflow-x-auto pb-2 hide-scrollbar snap-x">
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-green-500 min-w-[140px] snap-center flex-1">
+                    <div class="text-xs text-gray-500 mb-1">本月收入</div>
+                    <div class="text-xl font-bold text-coffee-800 font-mono" id="disp-income">0</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-red-400 min-w-[140px] snap-center flex-1">
+                    <div class="text-xs text-gray-500 mb-1">本月支出</div>
+                    <div class="text-xl font-bold text-coffee-800 font-mono" id="disp-expense">0</div>
+                </div>
+                <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 border-coffee-500 min-w-[140px] snap-center flex-1">
+                    <div class="text-xs text-gray-500 mb-1">本月淨利</div>
+                    <div class="text-xl font-bold text-coffee-700 font-mono" id="disp-net">0</div>
+                </div>
+            </div>
+
+            <!-- Transaction Form -->
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-100">
+                <div class="flex bg-stone-100 p-1 rounded-xl mb-4">
+                    <button onclick="setType('out')" id="btn-out" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all bg-red-400 text-white shadow-sm">支出</button>
+                    <button onclick="setType('in')" id="btn-in" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all text-gray-400">收入</button>
+                </div>
+                <div class="space-y-4">
+                    <div id="expense-options">
+                        <label class="text-xs font-bold text-stone-400 ml-1 uppercase">項目 Category</label>
+                        <div class="flex gap-2 mt-1">
+                            <select id="cat-select" onchange="updateItemSelect()" class="w-1/3 bg-stone-50 border border-stone-200 rounded-xl p-3 text-coffee-900 outline-none focus:border-coffee-500 transition-colors">
+                                <option value="stock">叫貨</option>
+                                <option value="rent">房租</option>
+                                <option value="mgmt">管理費</option>
+                                <option value="electric">電費</option>
+                                <option value="water">水費</option>
+                                <option value="labor">人事</option>
+                                <option value="insurance">保險</option>
+                                <option value="other">雜支</option>
+                            </select>
+                            <div class="w-2/3 relative">
+                                <select id="item-select" class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-coffee-900 outline-none focus:border-coffee-500 appearance-none"></select>
+                                <input type="text" id="custom-note" placeholder="輸入備註..." class="w-full bg-stone-50 border border-stone-200 rounded-xl p-3 text-coffee-900 outline-none focus:border-coffee-500 hidden">
+                                <div id="select-arrow" class="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-stone-400"><svg width="16" height="16" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd"/></svg></div>
+                            </div>
+                        </div>
+                        <div id="stock-details" class="hidden grid grid-cols-2 gap-3 mt-3 bg-orange-50 p-3 rounded-xl border border-orange-100">
+                            <div><label class="text-[10px] font-bold text-coffee-500 uppercase">數量 Qty</label><input type="number" inputmode="decimal" id="qty-input" class="w-full mt-1 border border-orange-200 rounded-lg p-2 text-coffee-900 bg-white focus:ring-2 focus:ring-orange-200 outline-none text-center font-bold"></div>
+                            <div>
+                                <label class="text-[10px] font-bold text-coffee-500 uppercase">單位 Unit</label>
+                                <select id="unit-input" class="w-full mt-1 border border-orange-200 rounded-lg p-2 text-coffee-900 bg-white outline-none">
+                                    <option value="包">包</option><option value="罐">罐</option><option value="斤">斤</option><option value="件">件</option><option value="箱">箱</option><option value="袋">袋</option><option value="瓶">瓶</option><option value="個">個</option><option value="桶">桶</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="income-options" class="hidden"><label class="text-xs font-bold text-stone-400 ml-1 uppercase">備註 Note</label><input type="text" id="income-note" placeholder="例：今日營收" class="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3 text-coffee-900 outline-none focus:border-coffee-500"></div>
+                    <div><label class="text-xs font-bold text-stone-400 ml-1 uppercase">金額 Amount</label><input type="number" inputmode="decimal" id="amount-input" placeholder="0" class="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3 text-xl font-bold font-mono text-coffee-900 outline-none focus:border-coffee-500 focus:ring-2 focus:ring-coffee-100 transition-all"></div>
+                    <button id="btn-save" class="w-full bg-coffee-600 active:bg-coffee-800 text-white py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg transition-all transform active:scale-[0.98] flex justify-center items-center gap-2 mt-2">儲存紀錄</button>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-3">
+                <button id="btn-fixed-cost" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-red-400 text-lg">🏠</span>+ 房租與管理費</button>
+                <button id="btn-fixed-income" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-green-500 text-lg">💰</span>+ 預估固定營收</button>
+            </div>
+        </div>
+
+        <!-- 2. Report Tab -->
+        <div id="view-report" class="hidden fade-in space-y-4">
+            <div class="flex bg-stone-200 p-1 rounded-xl">
+                <button onclick="changeReportPeriod('month')" id="rp-month" class="flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-coffee-700 shadow-sm transition-all">月</button>
+                <button onclick="changeReportPeriod('quarter')" id="rp-quarter" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all">季</button>
+                <button onclick="changeReportPeriod('half')" id="rp-half" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all">半年</button>
+                <button onclick="changeReportPeriod('year')" id="rp-year" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all">年</button>
+            </div>
+            <div class="text-center text-xs text-stone-400 font-bold" id="report-date-range"></div>
+            <div class="flex border-b border-stone-200">
+                <button onclick="switchReportTab('chart')" id="subtab-chart" class="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600 transition-all">收支趨勢</button>
+                <button onclick="switchReportTab('stock')" id="subtab-stock" class="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent transition-all">叫貨分析</button>
+                <button onclick="switchReportTab('attn')" id="subtab-attn" class="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent transition-all">出勤率</button>
+            </div>
+            
+            <div id="report-chart" class="space-y-4">
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-white p-3 rounded-xl shadow-sm border border-stone-100"><div class="text-xs text-stone-400 mb-1">營收比較</div><div class="text-lg font-bold text-coffee-800 font-mono" id="comp-inc-curr">0</div><div class="text-[10px] flex items-center gap-1 mt-1" id="comp-inc-diff"><span class="text-stone-400">vs 上期 $0</span></div></div>
+                    <div class="bg-white p-3 rounded-xl shadow-sm border border-stone-100"><div class="text-xs text-stone-400 mb-1">淨利比較</div><div class="text-lg font-bold text-coffee-800 font-mono" id="comp-net-curr">0</div><div class="text-[10px] flex items-center gap-1 mt-1" id="comp-net-diff"><span class="text-stone-400">vs 上期 $0</span></div></div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
+                    <div class="flex flex-col items-center mb-2"><h4 class="font-bold text-coffee-700 mb-4 text-sm">成本結構佔比</h4><div class="relative w-48 h-48"><svg id="pie-chart" viewBox="0 0 100 100" class="w-full h-full transform -rotate-90"></svg></div><div id="pie-legend" class="grid grid-cols-2 gap-x-4 gap-y-2 mt-6 text-xs text-stone-600 w-full"></div></div>
+                </div>
+            </div>
+            <div id="report-stock" class="hidden space-y-3">
+                <div class="flex justify-between text-xs text-stone-400 px-2 font-bold uppercase"><span>品項</span><span>本期數量 (vs上期)</span></div>
+                <div id="stock-list" class="space-y-3"></div><div id="stock-empty-msg" class="text-center text-stone-400 py-10 bg-white rounded-2xl border border-stone-100">尚無資料</div>
+            </div>
+            <div id="report-attn" class="hidden space-y-3">
+                 <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
+                     <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤統計 (排班 vs 打卡)</h4>
+                     <div id="attn-stats-list" class="space-y-3"></div>
+                     <div id="attn-stats-empty" class="text-center text-stone-400 text-xs py-4">無排班或打卡紀錄</div>
+                 </div>
+            </div>
+        </div>
+
+        <!-- 3. Schedule Tab -->
+        <div id="view-schedule" class="hidden fade-in space-y-4">
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-coffee-800">本月班表</h3>
+                    <div class="flex gap-2">
+                        <button onclick="addLeave()" class="text-xs bg-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold active:bg-red-200">登記請假</button>
+                        <button onclick="autoSchedule()" class="text-xs bg-coffee-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-sm active:bg-coffee-800">一鍵排班</button>
+                        <button onclick="clearSchedule()" class="text-xs bg-white text-red-500 border border-red-200 px-3 py-1.5 rounded-lg font-bold active:bg-red-50">清空</button>
+                    </div>
+                </div>
+                
+                <div class="flex gap-2 mb-2 text-[10px] text-stone-500 justify-center">
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-stone-200 border border-stone-300 rounded-full"></span>假</span>
+                </div>
+
+                <div class="text-center text-[10px] text-stone-400 mb-2">💡 點擊日期可手動調整班別</div>
+
+                <div class="calendar-grid text-center font-bold text-stone-400 mb-2 text-xs">
+                    <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+                </div>
+                <div id="schedule-calendar" class="calendar-grid bg-stone-100 rounded-lg overflow-hidden border border-stone-200"></div>
+            </div>
+            <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
+                <h4 class="font-bold text-sm text-coffee-700 mb-3">請假紀錄</h4>
+                <div id="leave-list" class="space-y-2"></div>
+                <div id="leave-empty" class="text-xs text-center text-stone-400 py-4">無請假紀錄</div>
+            </div>
+        </div>
+
+        <!-- 4. Staff Tab -->
+        <div id="view-staff" class="hidden fade-in space-y-4">
+            <div class="flex justify-end">
+                <button onclick="addEmployee()" class="bg-coffee-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md flex items-center gap-1">+ 新增員工</button>
+            </div>
+            <div class="bg-orange-50 border border-orange-100 p-3 rounded-xl text-xs text-coffee-700 mb-2">
+                <span class="font-bold">🎯 獎金與規則：</span>
+                <div class="grid grid-cols-1 gap-1 mt-1 opacity-80">
+                    <span>• 職務：木白匠(全時段)、糖事人(僅白/晚班)</span>
+                    <span>• 規則：做六休一、國定假日雙薪</span>
+                    <span>• 滿40hr+$500 / 80hr+$1000 / 120hr+$1500...</span>
+                </div>
+            </div>
+            <div id="staff-list" class="space-y-3"></div>
+            <div id="staff-empty" class="text-center text-stone-400 py-10 bg-white rounded-2xl border border-stone-100">尚無員工資料，請新增</div>
+        </div>
+
+        <!-- 5. List Tab -->
+        <div id="view-list" class="hidden fade-in bg-white rounded-2xl shadow-sm border border-stone-100 overflow-hidden min-h-[50vh] pb-24">
+            <div class="flex border-b border-stone-200">
+                <button onclick="switchListTab('tx')" id="ltab-tx" class="flex-1 py-3 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600">收支明細</button>
+                <button onclick="switchListTab('attn')" id="ltab-attn" class="flex-1 py-3 text-sm font-bold text-stone-400 border-b-2 border-transparent">出勤紀錄</button>
+            </div>
+            <div id="list-tx-container">
+                <div class="p-3 bg-stone-50 border-b border-stone-100 text-xs font-bold text-stone-500 uppercase tracking-wider flex justify-between"><span>日期 / 項目</span><span>金額</span></div>
+                <div id="transaction-list" class="divide-y divide-stone-100"></div>
+                <div id="empty-msg" class="text-center text-stone-400 py-10">本月尚無資料</div>
+            </div>
+            <div id="list-attn-container" class="hidden">
+                <div class="p-3 bg-stone-50 border-b border-stone-100 text-xs font-bold text-stone-500 uppercase tracking-wider">打卡紀錄 (Logs)</div>
+                <div id="attendance-list" class="divide-y divide-stone-100"></div>
+                <div id="attn-empty-msg" class="text-center text-stone-400 py-10">尚無打卡紀錄</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Bottom Nav -->
+    <nav class="bg-white border-t border-stone-200 flex justify-around items-center pb-safe-bottom pt-2 h-[calc(60px+env(safe-area-inset-bottom))] shadow-top fixed bottom-0 w-full z-30">
+        <button onclick="switchMainTab('home')" id="nav-home" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-coffee-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="text-[9px] font-bold">記帳</span></button>
+        <button onclick="switchMainTab('report')" id="nav-report" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="text-[9px] font-bold">報表</span></button>
+        <button onclick="switchMainTab('schedule')" id="nav-schedule" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="text-[9px] font-bold">排班</span></button>
+        <button onclick="switchMainTab('staff')" id="nav-staff" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="text-[9px] font-bold">員工</span></button>
+        <button onclick="switchMainTab('list')" id="nav-list" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="text-[9px] font-bold">明細</span></button>
+    </nav>
+
+    <!-- Modal (General - Highest Z-Index) -->
+    <div id="app-modal" class="fixed inset-0 bg-stone-900/60 z-[70] hidden flex items-center justify-center p-6 backdrop-blur-[4px]">
+        <div class="bg-[#fcfbf9] rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-stone-100 transform transition-all scale-100">
+            <div class="p-6">
+                <h3 id="modal-title" class="text-lg font-bold text-coffee-800 mb-2">提示</h3>
+                <p id="modal-msg" class="text-stone-600 mb-4 text-sm leading-relaxed whitespace-pre-line"></p>
+                <div id="modal-input-container" class="hidden mb-1"><input type="number" inputmode="decimal" id="modal-input" class="w-full border border-stone-300 rounded-xl p-3 bg-white text-coffee-900 text-lg outline-none focus:ring-2 focus:ring-coffee-500"></div>
+                <div id="modal-notice-inputs" class="hidden space-y-2 mb-1">
+                    <input type="text" id="notice-title" placeholder="標題" class="w-full border p-2 rounded">
+                    <textarea id="notice-content" placeholder="內容" class="w-full border p-2 rounded"></textarea>
+                    <select id="notice-priority" class="w-full border p-2 rounded"><option value="normal">一般</option><option value="high">緊急</option></select>
+                </div>
+            </div>
+            <div class="bg-stone-50 px-6 py-4 flex gap-3 border-t border-stone-200">
+                <button id="modal-btn-cancel" class="flex-1 py-3 text-stone-600 bg-white border border-stone-200 rounded-xl text-sm font-bold shadow-sm active:bg-stone-100">取消</button>
+                <button id="modal-btn-confirm" class="flex-1 py-3 bg-coffee-600 text-white rounded-xl shadow-md text-sm font-bold active:bg-coffee-800">確定</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Staff Edit Modal -->
+    <div id="staff-modal" class="fixed inset-0 bg-stone-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-[2px]">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden max-h-[90vh] overflow-y-auto">
+            <div class="p-5 border-b border-stone-100 flex justify-between items-center">
+                <h3 class="font-bold text-coffee-800 text-lg">員工資料</h3>
+                <button onclick="document.getElementById('staff-modal').classList.add('hidden')" class="text-stone-400 p-2">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div><label class="text-xs text-stone-500 font-bold uppercase">姓名</label><input id="st-name" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
+                <div>
+                    <label class="text-xs text-stone-500 font-bold uppercase">Google Email (打卡綁定)</label>
+                    <input id="st-email" type="email" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50" placeholder="example@gmail.com">
+                </div>
+                <div>
+                    <label class="text-xs text-stone-500 font-bold uppercase">職稱 Role</label>
+                    <select id="st-role" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50 outline-none">
+                        <option value="木白匠">木白匠 (全班別)</option>
+                        <option value="糖事人">糖事人 (僅白/晚班)</option>
+                    </select>
+                </div>
+                <div><label class="text-xs text-stone-500 font-bold uppercase">代表色</label><input type="color" id="st-color" class="w-full h-10 border border-stone-200 rounded-lg mt-1 p-1 bg-white cursor-pointer" value="#a67c52"></div>
+                <div><label class="text-xs text-stone-500 font-bold uppercase">電話</label><input id="st-phone" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
+                <div><label class="text-xs text-stone-500 font-bold uppercase">地址</label><input id="st-addr" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
+                <div><label class="text-xs text-stone-500 font-bold uppercase">緊急聯絡人</label><input id="st-emer" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50" placeholder="關係/電話"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">到職日</label><input type="date" id="st-date" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">時薪</label><input type="number" id="st-wage" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50" value="183"></div>
+                </div>
+            </div>
+            <div class="p-5 bg-stone-50 border-t border-stone-100">
+                <button onclick="saveEmployee()" class="w-full bg-coffee-600 text-white py-3 rounded-xl font-bold shadow-md">儲存員工資料</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leave Modal -->
+    <div id="leave-modal" class="fixed inset-0 bg-stone-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-[2px]">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b border-stone-100"><h3 class="font-bold text-coffee-800 text-lg">登記請假</h3></div>
+            <div class="p-5 space-y-4 overflow-y-auto">
+                <div><label class="text-xs text-stone-500 font-bold uppercase">員工</label><select id="lv-emp" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></select></div>
+                <div>
+                    <label class="text-xs text-stone-500 font-bold uppercase mb-1 block">請假模式</label>
+                    <div class="flex bg-stone-100 p-1 rounded-lg">
+                        <button onclick="switchLeaveMode('single')" id="lm-single" class="flex-1 py-1.5 rounded text-xs font-bold bg-white shadow-sm">單日</button>
+                        <button onclick="switchLeaveMode('range')" id="lm-range" class="flex-1 py-1.5 rounded text-xs font-bold text-stone-400">連續</button>
+                        <button onclick="switchLeaveMode('recurring')" id="lm-recurring" class="flex-1 py-1.5 rounded text-xs font-bold text-stone-400">週期</button>
+                    </div>
+                </div>
+                <div id="lv-date-single">
+                    <label class="text-xs text-stone-500 font-bold uppercase">日期</label>
+                    <input type="date" id="lv-date" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50">
+                </div>
+                <div id="lv-date-range" class="hidden grid grid-cols-2 gap-2">
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">開始</label><input type="date" id="lv-start" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">結束</label><input type="date" id="lv-end" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
+                </div>
+                <div id="lv-weekdays" class="hidden">
+                    <label class="text-xs text-stone-500 font-bold uppercase mb-1 block">重複星期 (可多選)</label>
+                    <div class="flex justify-between gap-1">
+                        <input type="checkbox" id="wd-1" class="hidden chk-btn" value="1"><label for="wd-1" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">一</label>
+                        <input type="checkbox" id="wd-2" class="hidden chk-btn" value="2"><label for="wd-2" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">二</label>
+                        <input type="checkbox" id="wd-3" class="hidden chk-btn" value="3"><label for="wd-3" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">三</label>
+                        <input type="checkbox" id="wd-4" class="hidden chk-btn" value="4"><label for="wd-4" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">四</label>
+                        <input type="checkbox" id="wd-5" class="hidden chk-btn" value="5"><label for="wd-5" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">五</label>
+                        <input type="checkbox" id="wd-6" class="hidden chk-btn" value="6"><label for="wd-6" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">六</label>
+                        <input type="checkbox" id="wd-0" class="hidden chk-btn" value="0"><label for="wd-0" class="flex-1 py-2 text-center text-xs font-bold bg-stone-50 border border-stone-200 rounded cursor-pointer select-none">日</label>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">假別</label><select id="lv-type" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"><option value="事假">事假</option><option value="病假">病假</option><option value="排休">排休</option></select></div>
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">班次</label><select id="lv-period" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"><option value="all">全天</option><option value="早班">早班</option><option value="白班">白班</option><option value="晚班">晚班</option></select></div>
+                </div>
+            </div>
+            <div class="p-5 bg-stone-50 border-t border-stone-100 flex gap-3">
+                <button onclick="document.getElementById('leave-modal').classList.add('hidden')" class="flex-1 py-3 text-stone-500 bg-white border border-stone-200 rounded-xl font-bold shadow-sm">取消</button>
+                <button onclick="saveLeave()" class="flex-1 py-3 bg-coffee-600 text-white rounded-xl font-bold shadow-md">確認登記</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Day Schedule Modal -->
+    <div id="day-modal" class="fixed inset-0 bg-stone-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-[2px]">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden h-[70vh] flex flex-col">
+            <div class="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50">
+                <h3 class="font-bold text-coffee-800" id="day-modal-title">日期</h3>
+                <button onclick="document.getElementById('day-modal').classList.add('hidden')" class="text-stone-400 px-2 font-bold">✕</button>
+            </div>
+            <div class="p-4 flex-1 overflow-y-auto space-y-4">
+                <div><h4 class="text-xs font-bold text-stone-400 uppercase mb-2">當日班表</h4><div id="day-shift-list" class="space-y-2"></div></div>
+                <div><h4 class="text-xs font-bold text-stone-400 uppercase mb-2">當日請假</h4><div id="day-leave-list" class="space-y-2 text-sm text-stone-500"></div></div>
+            </div>
+            <div class="p-4 bg-stone-50 border-t border-stone-100">
+                <div class="flex gap-2">
+                    <select id="day-add-emp" class="flex-1 border border-stone-200 rounded-lg p-2 text-sm outline-none"></select>
+                    <select id="day-add-shift" class="w-24 border border-stone-200 rounded-lg p-2 text-sm outline-none"><option value="早班">早班</option><option value="白班">白班</option><option value="晚班">晚班</option></select>
+                    <button onclick="saveDaySchedule()" class="bg-coffee-600 text-white px-3 rounded-lg text-sm font-bold shadow-sm">新增</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // ============================================================
+        // ⚠️ 重要：請在此貼上您的 Firebase Config
+        // ============================================================
+        const firebaseConfig = {
+            // ... 請貼上您的設定 ...
+        };
+
+        let appId = 'default-app-id'; // 在正式環境可忽略或自行設定
+
+        // 如果您在 GitHub Pages 部署，因為沒有後端注入 __firebase_config，
+        // 程式會直接使用上面的 const firebaseConfig。
+        // 為了相容預覽環境與正式環境，這裡做個判斷：
+        try {
+            if (typeof __firebase_config !== 'undefined') {
+                const cfg = JSON.parse(__firebase_config);
+                // 覆蓋為預覽環境設定
+                Object.assign(firebaseConfig, cfg);
+                appId = __app_id;
+            }
+        } catch(e) {}
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        // ============================================================
+        // 資料庫路徑設定
+        // 為了在 GitHub Pages 正式運作，我們使用根目錄路徑。
+        // 如果您在預覽環境，會自動切換為沙盒路徑。
+        // ============================================================
+        const getCollection = (colName) => {
+            if (typeof __app_id !== 'undefined') {
+                 // 預覽沙盒模式
+                 return collection(db, 'artifacts', appId, 'users', auth.currentUser.uid, colName);
+            } else {
+                 // 正式模式 (GitHub Pages / Vercel)
+                 // 直接存取根目錄，所有登入者共享資料 (適合單一店鋪)
+                 return collection(db, colName);
+            }
+        };
+
+        const getDocRef = (colName, id) => {
+             if (typeof __app_id !== 'undefined') {
+                 return doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, colName, id);
+             } else {
+                 return doc(db, colName, id);
+             }
+        };
+
+        const CONFIG = {
+            fixedCost: 1200000, rent: 114597, mgmt: 5359, defaultIncome: 100000,
+            items: ['豆漿', '牛奶', '鮮奶油', '紅豆', '薏仁', '紫米', '糯米', '豆皮', '芋圓', '湯圓', '木薯', '蓮藕', '砂糖', '黃冰糖', '糯米粉', '木薯澱粉'],
+            colors: ['#8B4513', '#A0522D', '#CD853F', '#D2691E', '#DEB887', '#F4A460', '#BC8F8F', '#808000'],
+            shifts: [
+                { name: '早班', code: '早', time: '08:00-12:00', start: 8, end: 12, order: 1, count: 1, color: 'text-blue-600' },
+                { name: '白班', code: '白', time: '11:30-15:30', start: 11.5, end: 15.5, order: 2, count: 2, color: 'text-yellow-600' },
+                { name: '晚班', code: '晚', time: '16:30-20:30', start: 16.5, end: 20.5, order: 3, count: 2, color: 'text-purple-600' }
+            ]
+        };
+
+        const HOLIDAYS = {
+            '2025-01-01': '元旦', '2025-01-25': '春節', '2025-01-26': '春節', '2025-01-27': '除夕', '2025-01-28': '春節',
+            '2025-01-29': '春節', '2025-01-30': '春節', '2025-01-31': '春節', '2025-02-01': '春節', '2025-02-02': '春節',
+            '2025-02-28': '228', '2025-04-03': '兒節', '2025-04-04': '清明', '2025-04-05': '連假', '2025-04-06': '連假',
+            '2025-05-01': '勞動', '2025-05-30': '端午', '2025-05-31': '端午', '2025-06-01': '端午',
+            '2025-09-27': '教師', '2025-09-28': '教師', '2025-09-29': '教師',
+            '2025-10-04': '中秋', '2025-10-05': '中秋', '2025-10-06': '中秋', '2025-10-10': '國慶', '2025-10-11': '國慶', '2025-10-12': '國慶',
+            '2025-10-24': '光復', '2025-10-25': '光復', '2025-10-26': '光復', '2025-12-25': '行憲'
+        };
+
+        let state = {
+            user: null, transactions: [], employees: [], leaves: [], shifts: [], attendance: [], notices: [],
+            currentMonth: new Date().toISOString().slice(0, 7),
+            type: 'out', view: 'home', reportView: 'chart', reportPeriod: 'month',
+            selectedDate: null, leaveMode: 'single', listTab: 'tx'
+        };
+
+        const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; }
+        const getEl = (id) => document.getElementById(id);
+        const formatMoney = (n) => new Intl.NumberFormat('zh-TW', {style:'currency', currency: 'TWD', maximumFractionDigits: 0}).format(n);
+
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+            else await signInAnonymously(auth);
+        };
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                state.user = user;
+                const collections = ['transactions', 'employees', 'leaves', 'shifts', 'attendance', 'notices'];
+                collections.forEach(col => {
+                    onSnapshot(getCollection(col), (snapshot) => {
+                        const data = []; snapshot.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
+                        if(col === 'transactions' || col === 'attendance' || col === 'notices') data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                        state[col] = data;
+                        
+                        if(col === 'transactions') checkLoad();
+                        
+                        // Re-render
+                        if(state.view === 'report') renderReport();
+                        else if(state.view === 'staff') renderStaff();
+                        else if(state.view === 'schedule') renderSchedule();
+                        else if(state.view === 'home') { render(); renderNotices(); }
+                        else if(state.view === 'list') { renderList(); render(); }
+                        
+                        if(!getEl('day-modal').classList.contains('hidden') && state.selectedDate) openDayModal(state.selectedDate);
+                    });
+                });
+            }
+        });
+
+        const checkLoad = () => {
+            const overlay = getEl('loading-overlay');
+            if (overlay) { overlay.classList.add('opacity-0'); setTimeout(() => { if(overlay && overlay.parentNode) overlay.remove(); }, 300); }
+        };
+
+        const getRange=(p,a)=>{const y=parseInt(a.slice(0,4)),m=parseInt(a.slice(5,7));const fmt=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;if(p==='month'){const pm=m===1?12:m-1,py=m===1?y-1:y;return{start:fmt(y,m),end:fmt(y,m),pStart:fmt(py,pm),pEnd:fmt(py,pm)}}else if(p==='year'){return{start:fmt(y,1),end:fmt(y,12),pStart:fmt(y-1,1),pEnd:fmt(y-1,12)}}return{start:fmt(y,m),end:fmt(y,m),pStart:fmt(y,m),pEnd:fmt(y,m)};}; 
+        const calcStats=(txs,s,e)=>{const rel=txs.filter(t=>t.date.slice(0,7)>=s&&t.date.slice(0,7)<=e);let i=0,ex=0,st={};rel.forEach(t=>{if(t.type==='in')i+=t.amount;else{ex+=t.amount;if(t.cat==='stock'){if(!st[t.name])st[t.name]={qty:0,cost:0,unit:t.unit};st[t.name].qty+=(t.qty||0);st[t.name].cost+=t.amount;}}});return{inc:i,exp:ex,net:i-ex,stock:st,txs:rel};};
+
+        function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
+            const R = 6371; const dLat = deg2rad(lat2-lat1); const dLon = deg2rad(lon2-lon1);
+            const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2)*Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+        function deg2rad(deg) { return deg * (Math.PI/180); }
+
+        window.simulateCheckIn = async () => {
+             if(!state.employees.length) return Modal.show({type:'alert', message:'無員工資料'});
+             const emp = state.employees[0];
+             const now = new Date();
+             const timeStr = now.toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'});
+             await addDoc(getCollection('attendance'), {
+                 name: emp.name, date: now.toISOString().slice(0,10), time: timeStr, status: '準時', createdAt: Date.now()
+             });
+             Modal.show({type:'alert', message:`[模擬] ${emp.name} 於 ${timeStr} 打卡成功！`});
+        };
+
+        // --- Notices ---
+        window.addNotice = () => {
+             getEl('modal-notice-inputs').classList.remove('hidden');
+             Modal.show({
+                 type: 'confirm',
+                 title: '發布公告',
+                 message: '請輸入內容',
+                 onConfirm: async () => {
+                    const title = getEl('notice-title').value;
+                    const content = getEl('notice-content').value;
+                    const priority = getEl('notice-priority').value;
+                    if(!title || !content) return;
+                    await addDoc(getCollection('notices'), {
+                        title, content, priority, date: new Date().toISOString().slice(0,10), createdAt: Date.now()
+                    });
+                    getEl('notice-title').value = ''; getEl('notice-content').value = '';
+                    getEl('modal-notice-inputs').classList.add('hidden');
+                 }
+             });
+        };
+
+        function renderNotices() {
+            const list = getEl('notice-list'); if(!list) return; list.innerHTML = '';
+            if(state.notices.length === 0) getEl('notice-empty').classList.remove('hidden');
+            else {
+                getEl('notice-empty').classList.add('hidden');
+                state.notices.forEach(n => {
+                    const div = document.createElement('div');
+                    div.className = `notice-card ${n.priority}`;
+                    div.innerHTML = `<div class="flex justify-between items-center mb-1"><h4 class="font-bold text-sm text-coffee-800">${n.title}</h4><span class="text-[10px] text-stone-400">${n.date}</span></div><p class="text-xs text-stone-600">${n.content}</p>`;
+                    list.appendChild(div);
+                });
+            }
+        }
+
+        // --- Staff ---
+        window.addEmployee = () => { getEl('st-name').value=''; getEl('st-color').value='#a67c52'; getEl('st-email').value=''; getEl('staff-modal').classList.remove('hidden'); };
+        window.saveEmployee = async () => { 
+            const name=getEl('st-name').value; const color=getEl('st-color').value; const role=getEl('st-role').value; const email=getEl('st-email').value;
+            if(!name) return Modal.show({type:'alert',message:'請輸入姓名'}); 
+            const data={name, role, color, email, phone:getEl('st-phone').value, addr:getEl('st-addr').value, emer:getEl('st-emer').value, date:getEl('st-date').value, wage:Number(getEl('st-wage').value)}; 
+            await addDoc(getCollection('employees'), data); 
+            getEl('staff-modal').classList.add('hidden'); 
+        };
+        window.deleteStaff = async (id) => { 
+            Modal.show({type:'confirm',message:'刪除員工?',onConfirm:async()=>{
+                await deleteDoc(getDocRef('employees', id));
+            }}); 
+        };
+        
+        window.addLeave = () => { if(state.employees.length===0) return Modal.show({type:'alert',message:'無員工'}); const sel=getEl('lv-emp'); sel.innerHTML=''; state.employees.forEach(e=>{const o=document.createElement('option');o.value=e.name;o.textContent=e.name;sel.appendChild(o);}); window.switchLeaveMode('single'); getEl('leave-modal').classList.remove('hidden'); };
+        window.switchLeaveMode = (m) => { state.leaveMode=m; ['single','range','recurring'].forEach(k=>{const btn=getEl('lm-'+k); if(k===m){btn.classList.add('bg-white','shadow-sm','text-coffee-800');btn.classList.remove('text-stone-400');}else{btn.classList.remove('bg-white','shadow-sm','text-coffee-800');btn.classList.add('text-stone-400');}}); if(m==='single'){getEl('lv-date-single').classList.remove('hidden');getEl('lv-date-range').classList.add('hidden');getEl('lv-weekdays').classList.add('hidden');}else{getEl('lv-date-single').classList.add('hidden');getEl('lv-date-range').classList.remove('hidden'); if(m==='recurring') getEl('lv-weekdays').classList.remove('hidden'); else getEl('lv-weekdays').classList.add('hidden');} };
+        
+        window.saveLeave = async () => { 
+            const name=getEl('lv-emp').value, type=getEl('lv-type').value, period=getEl('lv-period').value; 
+            const leaves=[];
+            if(state.leaveMode==='single'){
+                const d=getEl('lv-date').value; if(!d)return Modal.show({type:'alert',message:'請選日期'}); leaves.push(d);
+            } else {
+                const s=getEl('lv-start').value, e=getEl('lv-end').value; if(!s||!e)return Modal.show({type:'alert',message:'請選日期'});
+                const start=new Date(s), end=new Date(e);
+                for(let dt=start; dt<=end; dt.setDate(dt.getDate()+1)){
+                    if(state.leaveMode==='recurring'){ const day=dt.getDay(); if(!getEl('wd-'+day).checked) continue; }
+                    leaves.push(dt.toISOString().slice(0,10));
+                }
+            }
+            if(leaves.length===0) return Modal.show({type:'alert',message:'無有效日期'});
+            
+            for(const d of leaves) {
+                const existing = state.leaves.find(l => l.name === name && l.date === d);
+                if (existing) {
+                    if (existing.period === 'all' || period === 'all' || existing.period === period) {
+                        return Modal.show({type:'alert',message:`${d} 該員工已有請假紀錄 (${existing.period})，無法重複登記。`});
+                    }
+                }
+            }
+
+            const col=getCollection('leaves');
+            Modal.show({type:'alert',message:`正在建立 ${leaves.length} 筆請假...`,autoClose:1000});
+            for(const d of leaves) await addDoc(col, {name, date:d, type, period});
+            getEl('leave-modal').classList.add('hidden');
+        };
+        window.deleteLeave = async (id) => { 
+            Modal.show({type:'confirm',message:'取消請假?',onConfirm:async()=>{
+                await deleteDoc(getDocRef('leaves', id));
+            }}); 
+        };
+
+        window.autoSchedule = async () => {
+            if(state.employees.length === 0) return Modal.show({ type: 'alert', message: '無員工可排班' });
+            Modal.show({
+                type: 'confirm',
+                message: `確定要為 ${state.currentMonth} 重新排班？\n(注意：舊班表將被清除並重新產生)`,
+                onConfirm: async () => {
+                    const shiftsToDelete = state.shifts.filter(s => s.date.startsWith(state.currentMonth));
+                    for (const shift of shiftsToDelete) { await deleteDoc(getDocRef('shifts', shift.id)); }
+
+                    const [year, month] = state.currentMonth.split('-');
+                    const daysInMonth = new Date(year, month, 0).getDate();
+                    let count = 0;
+
+                    for(let d=1; d<=daysInMonth; d++) {
+                        const dateStr = `${state.currentMonth}-${String(d).padStart(2,'0')}`;
+                        let dailySchedule = []; 
+
+                        for (const shiftType of CONFIG.shifts) {
+                            const shiftStart = shiftType.start; const shiftEnd = shiftType.end; const reqStart = shiftStart - 1; 
+                            let needed = shiftType.count;
+                            
+                            for(let i=0; i<needed; i++) {
+                                const candidates = state.employees.filter(emp => {
+                                    if (shiftType.code === '早' && emp.role === '糖事人') return false; 
+                                    const leave = state.leaves.find(l => l.date === dateStr && l.name === emp.name);
+                                    if (leave) {
+                                        if (leave.period === 'all') return false;
+                                        const leaveShift = CONFIG.shifts.find(s => s.name === leave.period);
+                                        if (leaveShift && reqStart < leaveShift.end && shiftEnd > leaveShift.start) return false;
+                                    }
+                                    const workedShifts = dailySchedule.filter(s => s.name === emp.name);
+                                    if (workedShifts.length >= 2) return false; 
+
+                                    for (const worked of workedShifts) {
+                                        const workedType = CONFIG.shifts.find(s => s.name === worked.shift);
+                                        if (shiftStart < workedType.end && shiftEnd > workedType.start) return false;
+                                    }
+
+                                    let consecutive = 0;
+                                    for(let back=1; back<=6; back++) {
+                                        const pastDate = new Date(year, month-1, d-back);
+                                        const pStr = pastDate.toISOString().slice(0,10);
+                                        const workedPast = state.shifts.find(s => s.date === pStr && s.name === emp.name);
+                                        if(workedPast) consecutive++; else break;
+                                    }
+                                    if (consecutive >= 6) return false; 
+
+                                    return true;
+                                });
+
+                                if(candidates.length > 0) {
+                                    const pick = candidates[Math.floor(Math.random() * candidates.length)];
+                                    await addDoc(getCollection('shifts'), { date: dateStr, name: pick.name, shift: shiftType.name, time: shiftType.time, code: shiftType.code });
+                                    dailySchedule.push({ name: pick.name, shift: shiftType.name });
+                                    count++;
+                                }
+                            }
+                        }
+                    }
+                    Modal.show({ type: 'alert', message: `排班完成！(新增 ${count} 班次)` });
+                }
+            });
+        };
+        
+        window.clearSchedule = () => {
+             Modal.show({
+                type: 'confirm',
+                title: '清空班表',
+                message: `確定要清空 ${state.currentMonth} 的所有排班嗎？\n(此動作無法復原)`,
+                onConfirm: async () => {
+                    const shiftsToDelete = state.shifts.filter(s => s.date.startsWith(state.currentMonth));
+                    if (shiftsToDelete.length === 0) return Modal.show({ type: 'alert', message: '本月無班表可清除' });
+                    for (const shift of shiftsToDelete) { await deleteDoc(getDocRef('shifts', shift.id)); }
+                    Modal.show({ type: 'alert', message: '已清空本月班表', autoClose: 1000 });
+                }
+            });
+        };
+
+        window.openDayModal = (dateStr) => {
+            state.selectedDate = dateStr;
+            getEl('day-modal').classList.remove('hidden');
+            setText('day-modal-title', `${dateStr} 班表詳情`);
+            
+            const sList = getEl('day-shift-list'); sList.innerHTML = '';
+            // SORT SHIFTS
+            const shifts = state.shifts.filter(s => s.date === dateStr);
+            const shiftOrder = { '早班': 1, '白班': 2, '晚班': 3 };
+            shifts.sort((a, b) => (shiftOrder[a.shift] || 99) - (shiftOrder[b.shift] || 99));
+
+            if (shifts.length === 0) sList.innerHTML = '<div class="text-xs text-stone-400 italic">本日無排班</div>';
+            else {
+                shifts.forEach(s => {
+                    // Find Employee Color
+                    const emp = state.employees.find(e => e.name === s.name) || {color:'#a67c52'};
+                    const div = document.createElement('div');
+                    div.className = "flex justify-between items-center bg-stone-50 p-2 rounded-lg border border-stone-100 text-sm";
+                    div.innerHTML = `
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full" style="background-color:${emp.color}"></span>
+                            <span class="font-bold" style="color:${emp.color}">${s.name}</span>
+                            <span class="text-xs text-stone-400">(${s.shift})</span>
+                        </div>
+                        <button onclick="deleteShift('${s.id}')" class="text-red-400 text-xs font-bold px-2 py-1 bg-red-50 rounded">刪除</button>
+                    `;
+                    sList.appendChild(div);
+                });
+            }
+            const lList = getEl('day-leave-list'); lList.innerHTML = '';
+            const leaves = state.leaves.filter(l => l.date === dateStr);
+            if (leaves.length === 0) lList.innerHTML = '無';
+            else {
+                leaves.forEach(l => {
+                    const div = document.createElement('div');
+                    div.className = "bg-stone-50 p-2 rounded text-stone-500 text-xs";
+                    div.textContent = `${l.name} (${l.type} - ${l.period === 'all' ? '全天' : l.period})`;
+                    lList.appendChild(div);
+                });
+            }
+            const empSel = getEl('day-add-emp'); empSel.innerHTML = '';
+            state.employees.forEach(e => { const opt = document.createElement('option'); opt.value = e.name; opt.textContent = e.name; empSel.appendChild(opt); });
+        };
+        
+        window.saveDaySchedule = async () => {
+            const name = getEl('day-add-emp').value;
+            const shiftName = getEl('day-add-shift').value;
+            if (!name || !state.selectedDate) return;
+
+            // 1. 檢查請假衝突
+            const leave = state.leaves.find(l => l.date === state.selectedDate && l.name === name);
+            if (leave) {
+                if (leave.period === 'all' || leave.period === shiftName) {
+                    return Modal.show({ type: 'alert', message: `⚠️ ${name} 當天已有「${leave.period}」請假！` });
+                }
+            }
+            
+            // 2. 檢查重複排班 (同一員工當天不能有相同班次)
+            const existingSameShift = state.shifts.find(s => s.date === state.selectedDate && s.name === name && s.shift === shiftName);
+            if (existingSameShift) return Modal.show({ type: 'alert', message: `⚠️ ${name} 當天已經有「${shiftName}」了！` });
+
+            // 3. 檢查工時重疊 (防呆：早班不能接白班)
+            const shiftType = CONFIG.shifts.find(s => s.name === shiftName);
+            const dailyWork = state.shifts.filter(s => s.date === state.selectedDate && s.name === name);
+            for (const worked of dailyWork) {
+                 const workedType = CONFIG.shifts.find(s => s.name === worked.shift);
+                 if (shiftType.start < workedType.end && shiftType.end > workedType.start) {
+                     return Modal.show({ type: 'alert', message: `⚠️ 時間衝突\n\n${name} 已排「${worked.shift}」，時間重疊無法排「${shiftName}」！` });
+                }
+            }
+
+            await addDoc(getCollection('shifts'), { date: state.selectedDate, name, shift: shiftName, time: shiftType.time, code: shiftType.code });
+        };
+        
+        window.deleteShift = async (id) => { 
+            await deleteDoc(getDocRef('shifts', id));
+        };
+
+        window.switchMainTab = (view) => {
+            state.view = view;
+            ['home','report','schedule','staff','list'].forEach(v => {
+                const el=getEl('view-'+v), nav=getEl('nav-'+v);
+                if(v===view){ if(el) el.classList.remove('hidden'); if(nav) {nav.classList.add('text-coffee-600'); nav.classList.remove('text-stone-400');} }
+                else{ if(el) el.classList.add('hidden'); if(nav) {nav.classList.remove('text-coffee-600'); nav.classList.add('text-stone-400');} }
+            });
+            if(view==='report') renderReport(); if(view==='staff') renderStaff(); if(view==='schedule') renderSchedule(); if(view==='home' || view==='list') { render(); if(view==='list') renderList(); if(view==='home') renderNotices(); }
+        }
+        
+        window.switchListTab = (tab) => {
+            state.listTab = tab;
+            if(tab === 'tx') {
+                getEl('list-tx-container').classList.remove('hidden');
+                getEl('list-attn-container').classList.add('hidden');
+                getEl('ltab-tx').classList.add('border-coffee-600', 'text-coffee-700'); getEl('ltab-tx').classList.remove('border-transparent', 'text-stone-400');
+                getEl('ltab-attn').classList.remove('border-coffee-600', 'text-coffee-700'); getEl('ltab-attn').classList.add('border-transparent', 'text-stone-400');
+            } else {
+                getEl('list-tx-container').classList.add('hidden');
+                getEl('list-attn-container').classList.remove('hidden');
+                getEl('ltab-attn').classList.add('border-coffee-600', 'text-coffee-700'); getEl('ltab-attn').classList.remove('border-transparent', 'text-stone-400');
+                getEl('ltab-tx').classList.remove('border-coffee-600', 'text-coffee-700'); getEl('ltab-tx').classList.add('border-transparent', 'text-stone-400');
+            }
+        }
+
+        // ... Transaction & Render Logic ...
+        window.addTransaction = async () => { if (!state.user) return; const amt = getEl('amount-input').value; if (!amt) return Modal.show({type:'alert',message:'請輸入金額'}); let name='', cat='', qty=0, unit=''; if (state.type === 'out') { cat = getEl('cat-select').value; if (cat === 'stock') { name = getEl('item-select').value; qty = Number(getEl('qty-input').value)||0; unit = getEl('unit-input').value; } else if(cat==='rent') name='房租'; else if(cat==='mgmt') name='管理費'; else name=getEl('custom-note').value||'雜支'; } else { cat = 'sales'; name = getEl('income-note').value || '營收'; } 
+        await addDoc(getCollection('transactions'), { date: state.currentMonth+'-'+new Date().getDate().toString().padStart(2,'0'), type: state.type, name, cat, amount: Number(amt), qty, unit, createdAt: Date.now() }); getEl('amount-input').value=''; Modal.show({type:'alert',message:'已儲存',autoClose:800}); };
+        
+        window.safeAddFixedCost = () => { if(!state.user)return; Modal.show({type:'confirm',title:'快速',message:'加入房租管理費?',onConfirm:async()=>{const r=getCollection('transactions'),n=Date.now();await addDoc(r,{date:state.currentMonth+'-05',type:'out',name:'房租',amount:CONFIG.rent,cat:'rent',createdAt:n});await addDoc(r,{date:state.currentMonth+'-05',type:'out',name:'管理費',amount:CONFIG.mgmt,cat:'mgmt',createdAt:n+1});Modal.show({type:'alert',message:'OK',autoClose:800});}}); };
+        window.safeAddFixedIncome = () => { if(!state.user)return; Modal.show({type:'prompt',title:'預估營收',message:'金額:',defaultValue:CONFIG.defaultIncome,onConfirm:async(v)=>{const n=Number(v);if(!n)return;await addDoc(getCollection('transactions'),{date:state.currentMonth+'-01',type:'in',name:'預估營收',amount:n,cat:'sales',createdAt:Date.now()});Modal.show({type:'alert',message:'OK',autoClose:800});}}); };
+        window.safeDeleteTx = (id) => { if(!state.user)return; Modal.show({type:'confirm',title:'刪除',message:'確定?',onConfirm:async()=>{await deleteDoc(getDocRef('transactions', id));}}); };
+        window.setType=t=>{state.type=t; const i=getEl('btn-in'),o=getEl('btn-out'),io=getEl('income-options'),eo=getEl('expense-options'); if(t==='in'){i.className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-green-600 text-white shadow-sm";o.className="flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400";io.classList.remove('hidden');eo.classList.add('hidden');}else{o.className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-red-400 text-white shadow-sm";i.className="flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400";eo.classList.remove('hidden');io.classList.add('hidden');}};
+        window.updateItemSelect=()=>{const cat=getEl('cat-select').value,is=getEl('item-select'),ci=getEl('custom-note'),ar=getEl('select-arrow'),sd=getEl('stock-details'); is.innerHTML=''; if(cat==='stock'){is.classList.remove('hidden');ar.classList.remove('hidden');ci.classList.add('hidden');sd.classList.remove('hidden');CONFIG.items.forEach(i=>{const o=document.createElement('option');o.value=i;o.textContent=i;is.appendChild(o);});}else{sd.classList.add('hidden');if(['rent','mgmt'].includes(cat)){is.classList.add('hidden');ar.classList.add('hidden');ci.classList.add('hidden');}else{is.classList.add('hidden');ar.classList.add('hidden');ci.classList.remove('hidden');}}};
+        window.switchReportTab = (v) => { state.reportView = v; const c=getEl('report-chart'), s=getEl('report-stock'), a=getEl('report-attn'), bc=getEl('subtab-chart'), bs=getEl('subtab-stock'), ba=getEl('subtab-attn'); if(v==='chart'){c.classList.remove('hidden');s.classList.add('hidden');a.classList.add('hidden');bc.className="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600";bs.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";ba.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";}else if(v==='stock'){s.classList.remove('hidden');c.classList.add('hidden');a.classList.add('hidden');bs.className="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600";bc.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";ba.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";}else{a.classList.remove('hidden');c.classList.add('hidden');s.classList.add('hidden');ba.className="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600";bc.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";bs.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";} };
+        window.changeReportPeriod = (p) => { state.reportPeriod = p; ['month','quarter','half','year'].forEach(k => { getEl('rp-'+k).className = k===p ? "flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-coffee-700 shadow-sm transition-all" : "flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all"; }); renderReport(); }
+
+        function renderStaff() {
+            const list = getEl('staff-list'); if(!list) return; list.innerHTML = '';
+            if(state.employees.length === 0) return getEl('staff-empty').classList.remove('hidden');
+            getEl('staff-empty').classList.add('hidden');
+            state.employees.forEach(e => {
+                const myShifts = state.shifts.filter(s => s.name === e.name && s.date.startsWith(state.currentMonth));
+                let totalHours = 0, holidayHours = 0;
+                myShifts.forEach(s => { if (HOLIDAYS[s.date]) holidayHours += 4; else totalHours += 4; });
+                let bonus = 0; const totalWork = totalHours + holidayHours;
+                if (totalWork >= 160) bonus = 2000; else if (totalWork >= 120) bonus = 1500; else if (totalWork >= 80) bonus = 1000; else if (totalWork >= 40) bonus = 500;
+                const baseWage = e.wage || 183; const salary = (totalHours * baseWage) + (holidayHours * baseWage * 2); const totalPay = salary + bonus;
+                const div = document.createElement('div'); div.className = "bg-white p-4 rounded-xl shadow-sm border border-stone-100";
+                div.innerHTML = `<div class="flex justify-between items-start mb-3"><div class="flex items-center gap-2"><span class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style="background-color: ${e.color || '#a67c52'}">${e.name[0]}</span><div><div class="font-bold text-coffee-800 text-lg flex items-center gap-1">${e.name}<span class="role-tag bg-stone-100 text-stone-500">${e.role==='木白匠'?'匠':'糖'}</span><span class="text-[9px] text-gray-300 ml-1 font-normal">${e.email?'🔗':''}</span></div><div class="text-xs text-stone-500">時薪 $${baseWage}</div></div></div><button onclick="deleteStaff('${e.id}')" class="text-stone-300 hover:text-red-500 text-sm">✕</button></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2 text-xs mb-2"><div class="text-stone-500">一般時數: <span class="font-bold text-coffee-700">${totalHours}h</span></div><div class="text-stone-500">國定假日: <span class="font-bold text-red-500">${holidayHours}h</span></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2"><div><div class="text-[10px] text-stone-400">激勵獎金</div><div class="font-bold text-green-600">+$${bonus}</div></div><div><div class="text-[10px] text-stone-400">預估薪資</div><div class="font-bold text-coffee-900">$${totalPay.toLocaleString()}</div></div></div>`;
+                list.appendChild(div);
+            });
+        }
+
+        function renderSchedule() {
+            const cal = getEl('schedule-calendar'); if(!cal) return; cal.innerHTML = '';
+            const [year, month] = state.currentMonth.split('-'); const firstDay = new Date(year, month-1, 1).getDay(); const daysInMonth = new Date(year, month, 0).getDate();
+            for(let i=0; i<firstDay; i++) cal.appendChild(document.createElement('div'));
+            
+            for(let d=1; d<=daysInMonth; d++) {
+                const dateStr = `${state.currentMonth}-${String(d).padStart(2,'0')}`;
+                const cell = document.createElement('div'); cell.className = "calendar-cell"; cell.onclick = () => openDayModal(dateStr);
+                const holidayName = HOLIDAYS[dateStr] ? `<span class="holiday-tag">${HOLIDAYS[dateStr]}</span>` : '';
+                cell.innerHTML = `<span class="day-number">${d}${holidayName}</span>`;
+                
+                // --- Shift Grouping Display ---
+                const dailyShifts = state.shifts.filter(s => s.date === dateStr);
+                const groups = { '早班': [], '白班': [], '晚班': [] };
+                dailyShifts.forEach(s => { if(groups[s.shift]) groups[s.shift].push(s.name); });
+
+                ['早班', '白班', '晚班'].forEach(shiftName => {
+                    const names = groups[shiftName];
+                    if (names.length > 0) {
+                        const shiftConf = CONFIG.shifts.find(s => s.name === shiftName);
+                        // Sort names inside the shift line alphabetically
+                        names.sort();
+                        
+                        // Generate Colored Names
+                        const coloredNames = names.map(n => {
+                            const emp = state.employees.find(e => e.name === n) || {color: '#57534e'};
+                            return `<span class="emp-name" style="color: ${emp.color}">${n}</span>`;
+                        }).join(', ');
+
+                        const row = document.createElement('div');
+                        row.className = "shift-row";
+                        row.innerHTML = `<span class="shift-label">${shiftConf.code}:</span> ${coloredNames}`;
+                        cell.appendChild(row);
+                    }
+                });
+
+                // Leave Dots
+                state.leaves.filter(l => l.date === dateStr).forEach(l => {
+                    const row = document.createElement('div');
+                    row.className = "shift-row";
+                    row.style.background = '#f5f5f4'; // Gray bg for leave
+                    row.innerHTML = `<span class="shift-label text-stone-400">假:</span> <span class="text-stone-400 text-[9px]">${l.name}</span>`;
+                    cell.appendChild(row);
+                });
+
+                cal.appendChild(cell);
+            }
+            const lList = getEl('leave-list'); if(lList){ lList.innerHTML = ''; const mLeaves = state.leaves.filter(l => l.date.startsWith(state.currentMonth)).sort((a,b)=>a.date.localeCompare(b.date)); if(mLeaves.length === 0) getEl('leave-empty').classList.remove('hidden'); else { getEl('leave-empty').classList.add('hidden'); mLeaves.forEach(l => { const div = document.createElement('div'); div.className = "flex justify-between text-sm bg-stone-50 p-2 rounded-lg border border-stone-100"; div.innerHTML = `<span><span class="font-mono text-coffee-600 mr-2">${l.date.slice(5)}</span>${l.name} (${l.type}-${l.period==='all'?'全天':l.period})</span><button onclick="deleteLeave('${l.id}')" class="text-stone-300">✕</button>`; lList.appendChild(div); }); } }
+        }
+
+        function renderList() {
+            const container = getEl('attendance-list'); if(!container) return; container.innerHTML = '';
+            const attns = state.attendance.filter(a => a.date.startsWith(state.currentMonth));
+            if(attns.length === 0) getEl('attn-empty-msg').classList.remove('hidden');
+            else {
+                getEl('attn-empty-msg').classList.add('hidden');
+                attns.forEach(a => {
+                    const div = document.createElement('div'); div.className = "flex justify-between items-center p-3 hover:bg-stone-50 transition-colors";
+                    div.innerHTML = `<div class="flex gap-2 items-center"><span class="font-mono text-xs bg-stone-100 px-1 rounded">${a.date.slice(5)}</span><span class="font-bold text-coffee-800">${a.name}</span></div><div class="text-xs text-stone-500 flex items-center gap-1"><span>${a.time}</span><span class="text-green-600 bg-green-50 px-1 rounded">準時</span></div>`;
+                    container.appendChild(div);
+                });
+            }
+        }
+
+        function render(){
+            const dispInc = getEl('disp-income'); if(!dispInc) return;
+            const c=state.transactions.filter(t=>t.date.startsWith(state.currentMonth));
+            let i=0,e=0; c.forEach(t=>{if(t.type==='in')i+=t.amount;else e+=t.amount});
+            const n=i-e; setText('disp-income', formatMoney(i)); setText('disp-expense', formatMoney(e));
+            const ne=getEl('disp-net'); if(ne){ ne.textContent=formatMoney(n); ne.className=`text-xl font-bold font-mono ${n>=0?'text-coffee-700':'text-red-500'}`; }
+            let tn=0; state.transactions.forEach(t=>{if(t.type==='in')tn+=t.amount;else tn-=t.amount});
+            const rm=CONFIG.fixedCost-tn; setText('disp-remaining', formatMoney(Math.max(0,rm)));
+            const pb = getEl('progress-bar'); if(pb) pb.style.width=`${Math.min(100,Math.max(0,(tn/CONFIG.fixedCost)*100))}%`;
+            const tb=getEl('transaction-list'); 
+            if(tb) {
+                tb.innerHTML='';
+                if(c.length===0 && getEl('empty-msg')) getEl('empty-msg').classList.remove('hidden');
+                else {
+                    if(getEl('empty-msg')) getEl('empty-msg').classList.add('hidden');
+                    c.forEach(t=>{
+                        let nd=t.name; if(t.qty&&t.cat==='stock')nd+=` <span class="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded-full ml-1">${t.qty}${t.unit}</span>`;
+                        const d=document.createElement('div');d.className="flex justify-between items-center p-4 hover:bg-stone-50 active:bg-stone-100 transition-colors";
+                        d.innerHTML=`<div class="flex flex-col gap-1"><span class="text-xs text-stone-400 font-mono">${t.date.slice(5)}</span><span class="text-sm font-bold text-coffee-900 flex items-center"><span class="w-1.5 h-1.5 rounded-full mr-2 ${t.type==='in'?'bg-green-500':'bg-red-400'}"></span>${nd}</span></div><div class="flex items-center gap-3"><span class="font-bold font-mono text-base ${t.type==='in'?'text-green-600':'text-coffee-700'}">${formatMoney(t.amount)}</span><button onclick="safeDeleteTx('${t.id}')" class="text-stone-300 hover:text-red-500 p-2 -mr-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>`;
+                        tb.appendChild(d);
+                    });
+                }
+            }
+        }
+
+        function renderReport(){
+            const rangeEl = getEl('report-date-range'); if(!rangeEl) return;
+            const r=getRange(state.reportPeriod,state.currentMonth),c=calcStats(state.transactions,r.start,r.end),p=calcStats(state.transactions,r.pStart,r.pEnd);
+            rangeEl.textContent=`${r.start} ~ ${r.end}`;
+            const sc=(id,cv,pv)=>{const el=getEl(id+'-curr'); if(!el)return; el.textContent=formatMoney(cv);const d=cv-pv,pct=pv!==0?Math.round((d/Math.abs(pv))*100):(cv>0?100:0),cl=d>=0?'text-green-600':'text-red-500',ar=d>=0?'▲':'▼';getEl(id+'-diff').innerHTML=`<span class="${cl} font-bold">${ar} ${Math.abs(pct)}%</span> <span class="text-stone-400 ml-1">vs 上期 ${formatMoney(pv)}</span>`;};
+            sc('comp-inc',c.inc,p.inc); sc('comp-net',c.net,p.net);
+            const ct=getEl('pie-chart'),ld=getEl('pie-legend'); 
+            if(ct && ld) {
+                ct.innerHTML=''; ld.innerHTML=''; let mp={}; c.txs.filter(t=>t.type==='out').forEach(t=>{mp[t.name]=(mp[t.name]||0)+t.amount;}); let cd=Object.keys(mp).map(k=>({name:k,value:mp[k]})).sort((a,b)=>b.value-a.value);
+                if(cd.length===0)ct.innerHTML='<text x="50" y="50" text-anchor="middle" fill="#ccc" font-size="10" transform="rotate(90 50 50)">無資料</text>';
+                else{ const tl=cd.reduce((s,i)=>s+i.value,0);let ac=0; cd.forEach((i,x)=>{const pc=i.value/tl,dg=pc*360,cl=CONFIG.colors[x%CONFIG.colors.length],x1=50+40*Math.cos(Math.PI*ac/180),y1=50+40*Math.sin(Math.PI*ac/180),x2=50+40*Math.cos(Math.PI*(ac+dg)/180),y2=50+40*Math.sin(Math.PI*(ac+dg)/180),d=cd.length===1?`M 50 50 m -40 0 a 40 40 0 1 0 80 0 a 40 40 0 1 0 -80 0`:`M 50 50 L ${x1} ${y1} A 40 40 0 ${dg>180?1:0} 1 ${x2} ${y2} Z`;const pt=document.createElementNS("http://www.w3.org/2000/svg","path");pt.setAttribute("d",d);pt.setAttribute("fill",cl);pt.setAttribute("stroke","#fff");ct.appendChild(pt);ac+=dg;const li=document.createElement('div');li.className="flex items-center gap-1.5";li.innerHTML=`<span class="w-2.5 h-2.5 rounded-full" style="background:${cl}"></span><span class="truncate text-coffee-800 flex-1">${i.name}</span><span class="text-stone-400">${Math.round(pc*100)}%</span>`;ld.appendChild(li);}); }
+            }
+            const sl=getEl('stock-list'); 
+            if(sl) {
+                sl.innerHTML=''; const it=Object.keys(c.stock);
+                if(it.length===0 && getEl('stock-empty-msg')) getEl('stock-empty-msg').classList.remove('hidden');
+                else { if(getEl('stock-empty-msg')) getEl('stock-empty-msg').classList.add('hidden'); it.forEach(n=>{const ci=c.stock[n],pi=p.stock[n]||{qty:0},dq=ci.qty-pi.qty,dc=dq>0?'text-red-400':(dq<0?'text-green-500':'text-stone-400'),di=dq>0?'↑':(dq<0?'↓':'-');const dv=document.createElement('div');dv.className="bg-white p-3 rounded-xl shadow-sm border border-stone-100 flex justify-between items-center";dv.innerHTML=`<div class="font-bold text-coffee-800">${n}</div><div class="text-right"><div class="text-lg font-bold font-mono text-coffee-600">${ci.qty} <span class="text-xs text-stone-400">${ci.unit||''}</span></div><div class="text-xs ${dc} font-bold bg-stone-50 px-1.5 py-0.5 rounded inline-block">上期: ${pi.qty} (${di} ${Math.abs(dq)})</div></div>`;sl.appendChild(dv);}); }
+            }
+
+            // Attendance Report
+            const al = getEl('attn-stats-list');
+            if(al) {
+                al.innerHTML = '';
+                if(state.shifts.length === 0) getEl('attn-stats-empty').classList.remove('hidden');
+                else {
+                    getEl('attn-stats-empty').classList.add('hidden');
+                    state.employees.forEach(emp => {
+                        const scheduled = state.shifts.filter(s => s.name === emp.name && s.date.startsWith(state.currentMonth)).length;
+                        const attended = state.attendance.filter(a => a.name === emp.name && a.date.startsWith(state.currentMonth)).length;
+                        if(scheduled > 0) {
+                            const rate = Math.round((attended / scheduled) * 100);
+                            const color = rate >= 90 ? 'text-green-600' : (rate >= 70 ? 'text-yellow-600' : 'text-red-500');
+                            const div = document.createElement('div');
+                            div.className = "flex justify-between items-center text-sm border-b border-stone-50 pb-2";
+                            div.innerHTML = `<span class="font-bold text-coffee-800">${emp.name}</span><div class="flex gap-3"><span class="text-stone-400 text-xs">排班:${scheduled} / 打卡:${attended}</span><span class="${color} font-bold">${rate}%</span></div>`;
+                            al.appendChild(div);
+                        }
+                    });
+                }
+            }
+        }
+
+        const Modal = { show: (opts) => { const el = getEl('app-modal'), t=getEl('modal-title'), m=getEl('modal-msg'), inp=getEl('modal-input-container'), i=getEl('modal-input'), c=getEl('modal-btn-cancel'), ok=getEl('modal-btn-confirm'); t.textContent=opts.title||'提示'; m.textContent=opts.message||''; inp.classList.add('hidden'); c.classList.remove('hidden'); getEl('modal-notice-inputs').classList.add('hidden'); const nOk=ok.cloneNode(true), nC=c.cloneNode(true); ok.parentNode.replaceChild(nOk, ok); c.parentNode.replaceChild(nC, c); nC.onclick=()=>Modal.hide(); if(opts.type==='alert'){ nC.classList.add('hidden'); nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm();}; if(opts.autoClose) setTimeout(()=>Modal.hide(), opts.autoClose); } else if(opts.type==='confirm'){ nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm(true);}; } else if(opts.type==='prompt'){ inp.classList.remove('hidden'); i.value=opts.defaultValue||''; setTimeout(()=>i.focus(),100); nOk.onclick=()=>{const v=i.value; if(!v)return; Modal.hide(); if(opts.onConfirm)opts.onConfirm(v);}; } el.classList.remove('hidden'); }, hide:()=>{getEl('app-modal').classList.add('hidden');}};
+        window.Modal = Modal;
+        
+        getEl('month-select').value=state.currentMonth;
+        getEl('month-select').addEventListener('change',(e)=>{state.currentMonth=e.target.value;render();if(state.view==='report')renderReport();if(state.view==='schedule')renderSchedule();});
+        getEl('btn-save').addEventListener('click',window.addTransaction);
+        getEl('btn-fixed-cost').addEventListener('click',window.safeAddFixedCost);
+        getEl('btn-fixed-income').addEventListener('click',window.safeAddFixedIncome);
+        window.updateItemSelect();
+    </script>
+</body>
+</html>
