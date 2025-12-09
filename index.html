@@ -167,6 +167,7 @@
                 <button onclick="switchReportTab('attn')" id="subtab-attn" class="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent transition-all">出勤率</button>
             </div>
             
+            <!-- Chart & Stock View -->
             <div id="report-chart" class="space-y-4">
                 <div class="grid grid-cols-2 gap-3">
                     <div class="bg-white p-3 rounded-xl shadow-sm border border-stone-100"><div class="text-xs text-stone-400 mb-1">營收比較</div><div class="text-lg font-bold text-coffee-800 font-mono" id="comp-inc-curr">0</div><div class="text-[10px] flex items-center gap-1 mt-1" id="comp-inc-diff"><span class="text-stone-400">vs 上期 $0</span></div></div>
@@ -180,16 +181,18 @@
                 <div class="flex justify-between text-xs text-stone-400 px-2 font-bold uppercase"><span>品項</span><span>本期數量 (vs上期)</span></div>
                 <div id="stock-list" class="space-y-3"></div><div id="stock-empty-msg" class="text-center text-stone-400 py-10 bg-white rounded-2xl border border-stone-100">尚無資料</div>
             </div>
+            
+            <!-- Attendance Rate View -->
             <div id="report-attn" class="hidden space-y-3">
                  <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
-                     <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤統計 (排班 vs 打卡)</h4>
+                     <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤統計 (Schedules vs Logs)</h4>
                      <div id="attn-stats-list" class="space-y-3"></div>
                      <div id="attn-stats-empty" class="text-center text-stone-400 text-xs py-4">無排班或打卡紀錄</div>
                  </div>
             </div>
         </div>
 
-        <!-- 3. Schedule Tab -->
+        <!-- 3. Schedule Tab (Optimized) -->
         <div id="view-schedule" class="hidden fade-in space-y-4">
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
                 <div class="flex justify-between items-center mb-4">
@@ -202,10 +205,9 @@
                 </div>
                 
                 <div class="flex gap-2 mb-2 text-[10px] text-stone-500 justify-center">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-stone-200 border border-stone-300 rounded-full"></span>假</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早 8-12</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白 11:30-15:30</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚 16:30-20:30</span>
                 </div>
 
                 <div class="text-center text-[10px] text-stone-400 mb-2">💡 點擊日期可手動調整班別</div>
@@ -414,10 +416,18 @@
 
         // ============================================================
         // 資料庫路徑設定 (Data Path)
-        // 使用根目錄，確保與員工 App 串聯
+        // 為了在 GitHub Pages 正式運作，我們使用根目錄路徑。
+        // 如果您在預覽環境，會自動切換為沙盒路徑。
         // ============================================================
-        const getCollection = (colName) => collection(db, colName);
-        const getDocRef = (colName, id) => doc(db, colName, id);
+        const getCollection = (colName) => {
+             // 正式模式 (GitHub Pages / Vercel)
+             // 直接存取根目錄，所有登入者共享資料 (適合單一店鋪)
+             return collection(db, colName);
+        };
+
+        const getDocRef = (colName, id) => {
+             return doc(db, colName, id);
+        };
 
         const CONFIG = {
             fixedCost: 1200000, rent: 114597, mgmt: 5359, defaultIncome: 100000,
@@ -452,8 +462,18 @@
         const formatMoney = (n) => new Intl.NumberFormat('zh-TW', {style:'currency', currency: 'TWD', maximumFractionDigits: 0}).format(n);
 
         const initAuth = async () => {
-             // 嘗試使用匿名登入以存取資料庫 (需確認 Firebase Console 已開啟匿名登入)
-            await signInAnonymously(auth);
+            // 嘗試使用匿名登入以存取資料庫 (需確認 Firebase Console 已開啟匿名登入)
+            // 自動修復：如果自訂 Token 失敗（因設定檔不符），則自動轉為匿名登入
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                     await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                     throw new Error('No token');
+                }
+            } catch (e) {
+                console.log("Token auth failed, falling back to anonymous:", e);
+                await signInAnonymously(auth);
+            }
         };
         initAuth();
 
@@ -469,7 +489,7 @@
                         
                         if(col === 'transactions') checkLoad();
                         
-                        // Re-render active view
+                        // Re-render
                         if(state.view === 'report') renderReport();
                         else if(state.view === 'staff') renderStaff();
                         else if(state.view === 'schedule') renderSchedule();
@@ -512,7 +532,7 @@
         window.addNotice = () => {
              getEl('modal-notice-inputs').classList.remove('hidden');
              Modal.show({
-                 type: 'confirm',
+                 type: 'notice', // Special type for notice inputs
                  title: '發布公告',
                  message: '請輸入內容',
                  onConfirm: async () => {
@@ -938,7 +958,33 @@
             }
         }
 
-        const Modal = { show: (opts) => { const el = getEl('app-modal'), t=getEl('modal-title'), m=getEl('modal-msg'), inp=getEl('modal-input-container'), i=getEl('modal-input'), c=getEl('modal-btn-cancel'), ok=getEl('modal-btn-confirm'); t.textContent=opts.title||'提示'; m.textContent=opts.message||''; inp.classList.add('hidden'); c.classList.remove('hidden'); getEl('modal-notice-inputs').classList.add('hidden'); const nOk=ok.cloneNode(true), nC=c.cloneNode(true); ok.parentNode.replaceChild(nOk, ok); c.parentNode.replaceChild(nC, c); nC.onclick=()=>Modal.hide(); if(opts.type==='alert'){ nC.classList.add('hidden'); nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm();}; if(opts.autoClose) setTimeout(()=>Modal.hide(), opts.autoClose); } else if(opts.type==='confirm'){ nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm(true);}; } else if(opts.type==='prompt'){ inp.classList.remove('hidden'); i.value=opts.defaultValue||''; setTimeout(()=>i.focus(),100); nOk.onclick=()=>{const v=i.value; if(!v)return; Modal.hide(); if(opts.onConfirm)opts.onConfirm(v);}; } el.classList.remove('hidden'); }, hide:()=>{getEl('app-modal').classList.add('hidden');}};
+        const Modal = { show: (opts) => { const el = getEl('app-modal'), t=getEl('modal-title'), m=getEl('modal-msg'), inp=getEl('modal-input-container'), i=getEl('modal-input'), c=getEl('modal-btn-cancel'), ok=getEl('modal-btn-confirm'), n=getEl('modal-notice-inputs'); 
+            t.textContent=opts.title||'提示'; m.textContent=opts.message||''; 
+            
+            // Logic for Notice Type
+            if(opts.type === 'notice') {
+                inp.classList.add('hidden');
+                n.classList.remove('hidden');
+            } else if(opts.type === 'prompt') {
+                inp.classList.remove('hidden'); 
+                n.classList.add('hidden');
+                i.value=opts.defaultValue||''; 
+                setTimeout(()=>i.focus(),100); 
+            } else {
+                inp.classList.add('hidden'); 
+                n.classList.add('hidden');
+            }
+            
+            c.classList.remove('hidden'); 
+            const nOk=ok.cloneNode(true), nC=c.cloneNode(true); ok.parentNode.replaceChild(nOk, ok); c.parentNode.replaceChild(nC, c); 
+            nC.onclick=()=>Modal.hide(); 
+            
+            if(opts.type==='alert'){ nC.classList.add('hidden'); nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm();}; if(opts.autoClose) setTimeout(()=>Modal.hide(), opts.autoClose); } 
+            else if(opts.type==='confirm' || opts.type==='notice'){ nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm(true);}; } 
+            else if(opts.type==='prompt'){ nOk.onclick=()=>{const v=i.value; if(!v)return; Modal.hide(); if(opts.onConfirm)opts.onConfirm(v);}; } 
+            
+            el.classList.remove('hidden'); 
+        }, hide:()=>{getEl('app-modal').classList.add('hidden');}};
         window.Modal = Modal;
         
         getEl('month-select').value=state.currentMonth;
