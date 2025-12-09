@@ -45,9 +45,11 @@
         .day-number { font-size: 12px; font-weight: bold; color: #78716c; margin-bottom: 4px; text-align: center; }
         .holiday-tag { font-size: 9px; background: #fee2e2; color: #ef4444; border-radius: 4px; padding: 0 3px; margin-left: 2px; display: inline-block; font-weight: normal; }
         .chk-btn:checked + label { background-color: #6f4e37; color: white; border-color: #6f4e37; }
-        .notice-card { border-left: 4px solid #a67c52; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 8px; }
+        .notice-card { border-left: 4px solid #a67c52; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 8px; position: relative; }
         .notice-card.high { border-left-color: #ef4444; }
         .notice-card.normal { border-left-color: #3b82f6; }
+        .notice-delete { position: absolute; top: 8px; right: 8px; color: #d6d3d1; padding: 4px; }
+        .notice-delete:hover { color: #ef4444; }
     </style>
 </head>
 <body class="bg-[#f8f6f4] text-coffee-900 h-screen overflow-hidden flex flex-col">
@@ -208,6 +210,7 @@
                     <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早 8-12</span>
                     <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白 11:30-15:30</span>
                     <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚 16:30-20:30</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-stone-200 border border-stone-300 rounded-full"></span>假</span>
                 </div>
 
                 <div class="text-center text-[10px] text-stone-400 mb-2">💡 點擊日期可手動調整班別</div>
@@ -549,6 +552,17 @@
              });
         };
 
+        window.deleteNotice = async (id) => {
+            Modal.show({
+                type: 'confirm',
+                title: '刪除公告',
+                message: '確定要刪除此公告嗎？',
+                onConfirm: async () => {
+                    await deleteDoc(getDocRef('notices', id));
+                }
+            });
+        };
+
         function renderNotices() {
             const list = getEl('notice-list'); if(!list) return; list.innerHTML = '';
             if(state.notices.length === 0) getEl('notice-empty').classList.remove('hidden');
@@ -556,8 +570,18 @@
                 getEl('notice-empty').classList.add('hidden');
                 state.notices.forEach(n => {
                     const div = document.createElement('div');
-                    div.className = `notice-card ${n.priority}`;
-                    div.innerHTML = `<div class="flex justify-between items-center mb-1"><h4 class="font-bold text-sm text-coffee-800">${n.title}</h4><span class="text-[10px] text-stone-400">${n.date}</span></div><p class="text-xs text-stone-600">${n.content}</p>`;
+                    div.className = `notice-card ${n.priority} relative group`;
+                    div.innerHTML = `
+                        <div class="flex justify-between items-start mb-1">
+                            <div class="flex-1">
+                                <h4 class="font-bold text-sm text-coffee-800">${n.title}</h4>
+                                <span class="text-[10px] text-stone-400 block">${n.date}</span>
+                            </div>
+                            <button onclick="deleteNotice('${n.id}')" class="text-stone-300 hover:text-red-500 p-1 -mt-1 -mr-1 transition-colors">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                            </button>
+                        </div>
+                        <p class="text-xs text-stone-600 mt-1">${n.content}</p>`;
                     list.appendChild(div);
                 });
             }
@@ -942,6 +966,7 @@
                 if(state.shifts.length === 0) getEl('attn-stats-empty').classList.remove('hidden');
                 else {
                     getEl('attn-stats-empty').classList.add('hidden');
+                    // Calculate rates per employee
                     state.employees.forEach(emp => {
                         const scheduled = state.shifts.filter(s => s.name === emp.name && s.date.startsWith(state.currentMonth)).length;
                         const attended = state.attendance.filter(a => a.name === emp.name && a.date.startsWith(state.currentMonth)).length;
