@@ -34,17 +34,16 @@
         .spinner { width: 40px; height: 40px; border: 4px solid #eaddd7; border-top: 4px solid #6f4e37; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* 日曆樣式修正：使用 minmax(0, 1fr) 防止內容撐開格子 */
         .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
-        .calendar-cell { min-height: 100px; background: white; border: 1px solid #e7e5e4; padding: 2px; display: flex; flex-direction: column; gap: 2px; position: relative; cursor: pointer; transition: background 0.2s; border-radius: 4px; overflow: hidden; }
+        .calendar-cell { min-height: 100px; background: white; border: 1px solid #e7e5e4; padding: 4px; display: flex; flex-direction: column; gap: 2px; position: relative; cursor: pointer; transition: background 0.2s; border-radius: 4px; overflow: hidden; }
         .calendar-cell:active { background-color: #f5f5f4; border-color: #d6d3d1; }
         
-        .shift-row { font-size: 11px; display: flex; align-items: center; gap: 2px; margin-bottom: 2px; overflow: hidden; white-space: nowrap; background: #fafaf9; border-radius: 4px; padding: 2px; border: 1px solid #f5f5f4; }
+        .shift-row { font-size: 11px; display: flex; align-items: center; gap: 4px; margin-bottom: 3px; overflow: hidden; white-space: nowrap; background: #fafaf9; border-radius: 6px; padding: 2px 4px; border: 1px solid #f5f5f4; }
         .shift-label { font-weight: bold; color: #78716c; font-size: 11px; flex-shrink: 0; }
         .emp-name { font-weight: 700; font-size: 11px; text-shadow: 0 0 1px rgba(0,0,0,0.05); overflow: hidden; text-overflow: ellipsis; }
         
-        .day-number { font-size: 12px; font-weight: bold; color: #78716c; margin-bottom: 2px; text-align: center; }
-        .holiday-tag { font-size: 9px; background: #fee2e2; color: #ef4444; border-radius: 4px; padding: 0 2px; margin-left: 1px; display: inline-block; font-weight: normal; transform: scale(0.9); }
+        .day-number { font-size: 12px; font-weight: bold; color: #78716c; margin-bottom: 4px; text-align: center; }
+        .holiday-tag { font-size: 9px; background: #fee2e2; color: #ef4444; border-radius: 4px; padding: 0 3px; margin-left: 2px; display: inline-block; font-weight: normal; transform: scale(0.9); }
         .chk-btn:checked + label { background-color: #6f4e37; color: white; border-color: #6f4e37; }
         .notice-card { border-left: 4px solid #a67c52; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 8px; position: relative; }
         .notice-card.high { border-left-color: #ef4444; }
@@ -53,7 +52,8 @@
         .notice-delete:hover { color: #ef4444; }
     </style>
 </head>
-<body class="bg-[#f8f6f4] text-coffee-900 h-screen overflow-hidden flex flex-col">
+<!-- 使用 h-[100dvh] 解決手機網址列遮擋問題 -->
+<body class="bg-[#f8f6f4] text-coffee-900 h-[100dvh] overflow-hidden flex flex-col">
 
     <div id="loading-overlay">
         <div class="spinner"></div>
@@ -70,8 +70,8 @@
         </div>
     </header>
 
-    <!-- 調整 main padding 為 p-2 以爭取空間 -->
-    <main class="flex-1 overflow-y-auto overflow-x-hidden p-2 pb-24 hide-scrollbar relative">
+    <!-- 調整 padding-bottom 為 pb-40 (160px) 以確保底部內容完全可見 -->
+    <main class="flex-1 overflow-y-auto overflow-x-hidden p-2 pb-40 hide-scrollbar relative">
         
         <!-- 1. Home Tab -->
         <div id="view-home" class="fade-in space-y-4">
@@ -103,7 +103,7 @@
             </div>
 
             <!-- Transaction Form -->
-            <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-100">
+            <div class="bg-white p-5 rounded-2xl shadow-sm border border-stone-100 mb-4">
                 <div class="flex bg-stone-100 p-1 rounded-xl mb-4">
                     <button onclick="setType('out')" id="btn-out" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all bg-red-400 text-white shadow-sm">支出</button>
                     <button onclick="setType('in')" id="btn-in" class="flex-1 py-2.5 rounded-lg text-sm font-bold transition-all text-gray-400">收入</button>
@@ -140,17 +140,17 @@
                     </div>
                     <div id="income-options" class="hidden"><label class="text-xs font-bold text-stone-400 ml-1 uppercase">備註 Note</label><input type="text" id="income-note" placeholder="例：今日營收" class="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3 text-coffee-900 outline-none focus:border-coffee-500"></div>
                     <div><label class="text-xs font-bold text-stone-400 ml-1 uppercase">金額 Amount</label><input type="number" inputmode="decimal" id="amount-input" placeholder="0" class="w-full mt-1 bg-stone-50 border border-stone-200 rounded-xl p-3 text-xl font-bold font-mono text-coffee-900 outline-none focus:border-coffee-500 focus:ring-2 focus:ring-coffee-100 transition-all"></div>
-                    <button id="btn-save" class="w-full bg-coffee-600 active:bg-coffee-800 text-white py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg transition-all transform active:scale-[0.98] flex justify-center items-center gap-2 mt-2">儲存紀錄</button>
+                    <button id="btn-save" class="w-full bg-coffee-600 active:bg-coffee-800 text-white py-3.5 rounded-xl font-bold shadow-md hover:shadow-lg transition-all transform active:scale-[0.98] flex justify-center items-center gap-2 mt-2 mb-2">儲存紀錄</button>
                 </div>
             </div>
             
             <!-- GPS Simulation Button (For Testing) -->
-            <button onclick="simulateCheckIn()" class="w-full bg-white border-2 border-dashed border-coffee-300 text-coffee-600 py-3 rounded-xl font-bold text-sm hover:bg-coffee-50 transition-colors flex items-center justify-center gap-2">
+            <button onclick="simulateCheckIn()" class="w-full bg-white border-2 border-dashed border-coffee-300 text-coffee-600 py-3 rounded-xl font-bold text-sm hover:bg-coffee-50 transition-colors flex items-center justify-center gap-2 mb-8">
                 <span class="text-lg">📱</span> 模擬打卡回傳資料 (測試用)
             </button>
             <p class="text-[10px] text-center text-stone-400">當員工在專屬 App 打卡時，資料會即時同步至此</p>
 
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-2 gap-3 pb-8">
                 <button id="btn-fixed-cost" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-red-400 text-lg">🏠</span>+ 房租與管理費</button>
                 <button id="btn-fixed-income" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-green-500 text-lg">💰</span>+ 預估固定營收</button>
             </div>
@@ -185,6 +185,8 @@
                 <div class="flex justify-between text-xs text-stone-400 px-2 font-bold uppercase"><span>品項</span><span>本期數量 (vs上期)</span></div>
                 <div id="stock-list" class="space-y-3"></div><div id="stock-empty-msg" class="text-center text-stone-400 py-10 bg-white rounded-2xl border border-stone-100">尚無資料</div>
             </div>
+            
+            <!-- Attendance Rate View -->
             <div id="report-attn" class="hidden space-y-3">
                  <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
                      <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤統計 (Schedules vs Logs)</h4>
@@ -207,9 +209,9 @@
                 </div>
                 
                 <div class="flex gap-2 mb-2 text-[10px] text-stone-500 justify-center">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早 8-12</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白 11:30-15:30</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚 16:30-20:30</span>
                     <span class="flex items-center gap-1"><span class="w-2 h-2 bg-stone-200 border border-stone-300 rounded-full"></span>假</span>
                 </div>
 
@@ -966,7 +968,6 @@
                 if(state.shifts.length === 0) getEl('attn-stats-empty').classList.remove('hidden');
                 else {
                     getEl('attn-stats-empty').classList.add('hidden');
-                    // Calculate rates per employee
                     state.employees.forEach(emp => {
                         const scheduled = state.shifts.filter(s => s.name === emp.name && s.date.startsWith(state.currentMonth)).length;
                         const attended = state.attendance.filter(a => a.name === emp.name && a.date.startsWith(state.currentMonth)).length;
