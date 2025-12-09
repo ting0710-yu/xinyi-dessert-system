@@ -34,16 +34,17 @@
         .spinner { width: 40px; height: 40px; border: 4px solid #eaddd7; border-top: 4px solid #6f4e37; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
-        .calendar-cell { min-height: 100px; background: white; border: 1px solid #e7e5e4; padding: 4px; display: flex; flex-direction: column; gap: 2px; position: relative; cursor: pointer; transition: background 0.2s; border-radius: 4px; }
+        /* 日曆樣式修正：使用 minmax(0, 1fr) 防止內容撐開格子 */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; }
+        .calendar-cell { min-height: 100px; background: white; border: 1px solid #e7e5e4; padding: 2px; display: flex; flex-direction: column; gap: 2px; position: relative; cursor: pointer; transition: background 0.2s; border-radius: 4px; overflow: hidden; }
         .calendar-cell:active { background-color: #f5f5f4; border-color: #d6d3d1; }
         
-        .shift-row { font-size: 11px; display: flex; align-items: center; gap: 4px; margin-bottom: 3px; overflow: hidden; white-space: nowrap; background: #fafaf9; border-radius: 6px; padding: 2px 4px; border: 1px solid #f5f5f4; }
+        .shift-row { font-size: 11px; display: flex; align-items: center; gap: 2px; margin-bottom: 2px; overflow: hidden; white-space: nowrap; background: #fafaf9; border-radius: 4px; padding: 2px; border: 1px solid #f5f5f4; }
         .shift-label { font-weight: bold; color: #78716c; font-size: 11px; flex-shrink: 0; }
-        .emp-name { font-weight: 700; font-size: 11px; text-shadow: 0 0 1px rgba(0,0,0,0.05); }
+        .emp-name { font-weight: 700; font-size: 11px; text-shadow: 0 0 1px rgba(0,0,0,0.05); overflow: hidden; text-overflow: ellipsis; }
         
-        .day-number { font-size: 12px; font-weight: bold; color: #78716c; margin-bottom: 4px; text-align: center; }
-        .holiday-tag { font-size: 9px; background: #fee2e2; color: #ef4444; border-radius: 4px; padding: 0 3px; margin-left: 2px; display: inline-block; font-weight: normal; }
+        .day-number { font-size: 12px; font-weight: bold; color: #78716c; margin-bottom: 2px; text-align: center; }
+        .holiday-tag { font-size: 9px; background: #fee2e2; color: #ef4444; border-radius: 4px; padding: 0 2px; margin-left: 1px; display: inline-block; font-weight: normal; transform: scale(0.9); }
         .chk-btn:checked + label { background-color: #6f4e37; color: white; border-color: #6f4e37; }
         .notice-card { border-left: 4px solid #a67c52; background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); margin-bottom: 8px; position: relative; }
         .notice-card.high { border-left-color: #ef4444; }
@@ -69,7 +70,8 @@
         </div>
     </header>
 
-    <main class="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-24 hide-scrollbar relative">
+    <!-- 調整 main padding 為 p-2 以爭取空間 -->
+    <main class="flex-1 overflow-y-auto overflow-x-hidden p-2 pb-24 hide-scrollbar relative">
         
         <!-- 1. Home Tab -->
         <div id="view-home" class="fade-in space-y-4">
@@ -183,8 +185,6 @@
                 <div class="flex justify-between text-xs text-stone-400 px-2 font-bold uppercase"><span>品項</span><span>本期數量 (vs上期)</span></div>
                 <div id="stock-list" class="space-y-3"></div><div id="stock-empty-msg" class="text-center text-stone-400 py-10 bg-white rounded-2xl border border-stone-100">尚無資料</div>
             </div>
-            
-            <!-- Attendance Rate View -->
             <div id="report-attn" class="hidden space-y-3">
                  <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
                      <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤統計 (Schedules vs Logs)</h4>
@@ -207,9 +207,9 @@
                 </div>
                 
                 <div class="flex gap-2 mb-2 text-[10px] text-stone-500 justify-center">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早 8-12</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白 11:30-15:30</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚 16:30-20:30</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白</span>
+                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚</span>
                     <span class="flex items-center gap-1"><span class="w-2 h-2 bg-stone-200 border border-stone-300 rounded-full"></span>假</span>
                 </div>
 
