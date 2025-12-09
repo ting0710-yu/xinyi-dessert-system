@@ -140,6 +140,12 @@
                 </div>
             </div>
             
+            <!-- GPS Simulation Button (For Testing) -->
+            <button onclick="simulateCheckIn()" class="w-full bg-white border-2 border-dashed border-coffee-300 text-coffee-600 py-3 rounded-xl font-bold text-sm hover:bg-coffee-50 transition-colors flex items-center justify-center gap-2">
+                <span class="text-lg">📱</span> 模擬打卡回傳資料 (測試用)
+            </button>
+            <p class="text-[10px] text-center text-stone-400">當員工在專屬 App 打卡時，資料會即時同步至此</p>
+
             <div class="grid grid-cols-2 gap-3">
                 <button id="btn-fixed-cost" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-red-400 text-lg">🏠</span>+ 房租與管理費</button>
                 <button id="btn-fixed-income" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-green-500 text-lg">💰</span>+ 預估固定營收</button>
@@ -389,53 +395,29 @@
         import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ============================================================
-        // ⚠️ 重要：請在此貼上您的 Firebase Config
+        // ⚠️ 重要：正式上線前，請將下方的 firebaseConfig 替換為您在
+        // xuxu-helper 專案取得的真實設定！
         // ============================================================
         const firebaseConfig = {
-            // ... 請貼上您的設定 ...
+          apiKey: "AIzaSyATncVLAIoz28OJxLKk4zHQInSfqOvCLik",
+          authDomain: "xuxu-helper.firebaseapp.com",
+          projectId: "xuxu-helper",
+          storageBucket: "xuxu-helper.firebasestorage.app",
+          messagingSenderId: "1022083747734",
+          appId: "1:1022083747734:web:e5ea9af8d1cbc8554e97b7",
+          measurementId: "G-8Q10D83PMQ"
         };
-
-        let appId = 'default-app-id'; // 在正式環境可忽略或自行設定
-
-        // 如果您在 GitHub Pages 部署，因為沒有後端注入 __firebase_config，
-        // 程式會直接使用上面的 const firebaseConfig。
-        // 為了相容預覽環境與正式環境，這裡做個判斷：
-        try {
-            if (typeof __firebase_config !== 'undefined') {
-                const cfg = JSON.parse(__firebase_config);
-                // 覆蓋為預覽環境設定
-                Object.assign(firebaseConfig, cfg);
-                appId = __app_id;
-            }
-        } catch(e) {}
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
 
         // ============================================================
-        // 資料庫路徑設定
-        // 為了在 GitHub Pages 正式運作，我們使用根目錄路徑。
-        // 如果您在預覽環境，會自動切換為沙盒路徑。
+        // 資料庫路徑設定 (Data Path)
+        // 使用根目錄，確保與員工 App 串聯
         // ============================================================
-        const getCollection = (colName) => {
-            if (typeof __app_id !== 'undefined') {
-                 // 預覽沙盒模式
-                 return collection(db, 'artifacts', appId, 'users', auth.currentUser.uid, colName);
-            } else {
-                 // 正式模式 (GitHub Pages / Vercel)
-                 // 直接存取根目錄，所有登入者共享資料 (適合單一店鋪)
-                 return collection(db, colName);
-            }
-        };
-
-        const getDocRef = (colName, id) => {
-             if (typeof __app_id !== 'undefined') {
-                 return doc(db, 'artifacts', appId, 'users', auth.currentUser.uid, colName, id);
-             } else {
-                 return doc(db, colName, id);
-             }
-        };
+        const getCollection = (colName) => collection(db, colName);
+        const getDocRef = (colName, id) => doc(db, colName, id);
 
         const CONFIG = {
             fixedCost: 1200000, rent: 114597, mgmt: 5359, defaultIncome: 100000,
@@ -470,8 +452,8 @@
         const formatMoney = (n) => new Intl.NumberFormat('zh-TW', {style:'currency', currency: 'TWD', maximumFractionDigits: 0}).format(n);
 
         const initAuth = async () => {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
-            else await signInAnonymously(auth);
+             // 嘗試使用匿名登入以存取資料庫 (需確認 Firebase Console 已開啟匿名登入)
+            await signInAnonymously(auth);
         };
         initAuth();
 
@@ -487,7 +469,7 @@
                         
                         if(col === 'transactions') checkLoad();
                         
-                        // Re-render
+                        // Re-render active view
                         if(state.view === 'report') renderReport();
                         else if(state.view === 'staff') renderStaff();
                         else if(state.view === 'schedule') renderSchedule();
@@ -620,6 +602,7 @@
                 type: 'confirm',
                 message: `確定要為 ${state.currentMonth} 重新排班？\n(注意：舊班表將被清除並重新產生)`,
                 onConfirm: async () => {
+                    const shiftCollection = getCollection('shifts');
                     const shiftsToDelete = state.shifts.filter(s => s.date.startsWith(state.currentMonth));
                     for (const shift of shiftsToDelete) { await deleteDoc(getDocRef('shifts', shift.id)); }
 
@@ -666,7 +649,7 @@
 
                                 if(candidates.length > 0) {
                                     const pick = candidates[Math.floor(Math.random() * candidates.length)];
-                                    await addDoc(getCollection('shifts'), { date: dateStr, name: pick.name, shift: shiftType.name, time: shiftType.time, code: shiftType.code });
+                                    await addDoc(shiftCollection, { date: dateStr, name: pick.name, shift: shiftType.name, time: shiftType.time, code: shiftType.code });
                                     dailySchedule.push({ name: pick.name, shift: shiftType.name });
                                     count++;
                                 }
