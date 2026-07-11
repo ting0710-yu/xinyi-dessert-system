@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#6f4e37">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>信義店記帳</title>
+    <title>煦煦木白｜多分店排班（跨店支援修正版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -54,18 +54,40 @@
 </head>
 <body class="bg-[#f8f6f4] text-coffee-900 h-[100dvh] overflow-hidden flex flex-col">
 
+    <!-- Google 登入／權限確認 -->
+    <div id="auth-screen" class="fixed inset-0 z-[120] bg-[#f8f6f4] flex items-center justify-center p-6">
+        <div class="bg-white rounded-3xl shadow-xl border border-stone-100 p-7 w-full max-w-sm text-center">
+            <div class="w-16 h-16 rounded-full bg-coffee-100 text-coffee-700 flex items-center justify-center mx-auto mb-4 text-2xl">煦</div>
+            <h2 class="text-xl font-bold text-coffee-800 mb-2">煦煦木白分店系統</h2>
+            <p id="auth-message" class="text-sm text-stone-500 leading-relaxed mb-5">請使用已登記的 Google 帳號登入。</p>
+            <button id="google-login-btn" onclick="googleLogin()" class="w-full bg-white border border-stone-300 py-3 rounded-xl font-bold text-stone-700 shadow-sm active:bg-stone-50 flex items-center justify-center gap-2">
+                <span class="text-lg">G</span> 使用 Google 登入
+            </button>
+            <button id="claim-owner-btn" onclick="claimFirstOwner()" class="hidden w-full bg-coffee-600 text-white py-3 rounded-xl font-bold shadow-md active:bg-coffee-800">設為第一位管理員</button>
+            <button id="auth-logout-btn" onclick="logoutApp()" class="hidden mt-3 w-full text-xs text-stone-400 py-2">改用其他 Google 帳號</button>
+            <p id="auth-detail" class="text-[11px] text-stone-400 mt-4 leading-relaxed"></p>
+        </div>
+    </div>
+
     <div id="loading-overlay">
         <div class="spinner"></div>
         <div class="text-coffee-800 font-bold text-sm tracking-wide">系統連線中...</div>
     </div>
 
     <header class="bg-coffee-700 text-white pt-safe-top pb-3 px-4 shadow-md z-20 shrink-0">
-        <div class="flex justify-between items-center pt-2">
-            <h1 class="text-lg font-bold flex items-center gap-2">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-4.5-6c-2 0-4 2-5 4"/></svg>
-                信義店記帳
-            </h1>
-            <input type="month" id="month-select" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded px-2 py-1 outline-none focus:ring-1 focus:ring-orange-300">
+        <div class="pt-2 space-y-2">
+            <div class="flex justify-between items-center gap-3">
+                <div class="min-w-0">
+                    <h1 id="app-title" class="text-lg font-bold truncate">煦煦木白分店管理</h1>
+                    <div id="user-summary" class="text-[10px] text-coffee-100 truncate"></div>
+                </div>
+                <button onclick="logoutApp()" class="shrink-0 text-xs bg-coffee-800 border border-coffee-600 rounded-lg px-2.5 py-1.5">登出</button>
+            </div>
+            <div class="flex gap-2 items-center">
+                <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"></select>
+                <div id="store-badge" class="hidden flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-3 py-1.5 font-bold"></div>
+                <input type="month" id="month-select" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-orange-300">
+            </div>
         </div>
     </header>
 
@@ -146,7 +168,8 @@
             <button onclick="simulateCheckIn()" class="w-full bg-white border-2 border-dashed border-coffee-300 text-coffee-600 py-3 rounded-xl font-bold text-sm hover:bg-coffee-50 transition-colors flex items-center justify-center gap-2 mb-8">
                 <span class="text-lg">📱</span> 模擬打卡回傳資料 (測試用)
             </button>
-            <p class="text-[10px] text-center text-stone-400">當員工在專屬 App 打卡時，資料會即時同步至此</p>
+            <p class="text-[10px] text-center text-stone-400">當員工在專屬 App 打卡時，資料會即時同步至目前分店</p>
+            <button id="btn-migrate" onclick="migrateLegacyXinyiData()" class="admin-only w-full mt-3 bg-amber-50 border border-amber-200 text-amber-700 py-2.5 rounded-xl font-bold text-xs">首次升級：匯入舊版信義店資料</button>
 
             <div class="grid grid-cols-2 gap-3 pb-8">
                 <button id="btn-fixed-cost" class="bg-white border border-stone-200 p-3 rounded-xl text-xs font-medium text-stone-600 shadow-sm active:bg-stone-50 flex flex-col items-center gap-1"><span class="text-red-400 text-lg">🏠</span>+ 房租與管理費</button>
@@ -198,19 +221,15 @@
         <div id="view-schedule" class="hidden fade-in space-y-4">
             <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="font-bold text-coffee-800">本月班表</h3>
-                    <div class="flex gap-2">
+                    <h3 id="schedule-title" class="font-bold text-coffee-800">本月班表</h3>
+                    <div id="schedule-admin-actions" class="admin-only flex gap-2">
                         <button onclick="addLeave()" class="text-xs bg-red-100 text-red-600 px-3 py-1.5 rounded-lg font-bold active:bg-red-200">登記請假</button>
                         <button onclick="autoSchedule()" class="text-xs bg-coffee-600 text-white px-3 py-1.5 rounded-lg font-bold shadow-sm active:bg-coffee-800">一鍵排班</button>
                         <button onclick="clearSchedule()" class="text-xs bg-white text-red-500 border border-red-200 px-3 py-1.5 rounded-lg font-bold active:bg-red-50">清空</button>
                     </div>
                 </div>
                 
-                <div class="flex gap-2 mb-2 text-[10px] text-stone-500 justify-center">
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-blue-100 border border-blue-200 rounded-full"></span>早 8-12</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-100 border border-yellow-200 rounded-full"></span>白 11:00-15:00</span>
-                    <span class="flex items-center gap-1"><span class="w-2 h-2 bg-purple-100 border border-purple-200 rounded-full"></span>晚 15:00-19:00</span>
-                </div>
+                <div id="shift-legend" class="flex flex-wrap gap-2 mb-2 text-[10px] text-stone-500 justify-center"></div>
 
                 <div class="text-center text-[10px] text-stone-400 mb-2 animate-pulse">← 左右滑動查看完整班表 →</div>
 
@@ -237,11 +256,12 @@
                 <button onclick="addEmployee()" class="bg-coffee-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md flex items-center gap-1">+ 新增員工</button>
             </div>
             <div class="bg-orange-50 border border-orange-100 p-3 rounded-xl text-xs text-coffee-700 mb-2">
-                <span class="font-bold">🎯 獎金與規則：</span>
+                <span class="font-bold">🎯 分店與 Google 綁定：</span>
                 <div class="grid grid-cols-1 gap-1 mt-1 opacity-80">
-                    <span>• 職務：木白匠(全時段)、糖事人(僅白/晚班)</span>
-                    <span>• 規則：做六休一、國定假日雙薪</span>
-                    <span>• 滿40hr+$500 / 80hr+$1000 / 120hr+$1500...</span>
+                    <span>• 糖事人只能隸屬一間分店</span>
+                    <span>• 木白匠可勾選「跨店支援」，並在兩家店被排班</span>
+                    <span>• 跨店木白匠登入後可切換查看信義店與台大店班表</span>
+                    <span>• 系統會阻擋同一員工在兩家店的重疊班次</span>
                 </div>
             </div>
             <div id="staff-list" class="space-y-3"></div>
@@ -269,11 +289,11 @@
 
     <!-- Bottom Nav -->
     <nav class="bg-white border-t border-stone-200 flex justify-around items-center pb-safe-bottom pt-2 h-[calc(60px+env(safe-area-inset-bottom))] shadow-top fixed bottom-0 w-full z-30">
-        <button onclick="switchMainTab('home')" id="nav-home" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-coffee-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="text-[9px] font-bold">記帳</span></button>
-        <button onclick="switchMainTab('report')" id="nav-report" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="text-[9px] font-bold">報表</span></button>
+        <button onclick="switchMainTab('home')" id="nav-home" class="admin-nav nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-coffee-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="text-[9px] font-bold">記帳</span></button>
+        <button onclick="switchMainTab('report')" id="nav-report" class="admin-nav nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="text-[9px] font-bold">報表</span></button>
         <button onclick="switchMainTab('schedule')" id="nav-schedule" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="text-[9px] font-bold">排班</span></button>
-        <button onclick="switchMainTab('staff')" id="nav-staff" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="text-[9px] font-bold">員工</span></button>
-        <button onclick="switchMainTab('list')" id="nav-list" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="text-[9px] font-bold">明細</span></button>
+        <button onclick="switchMainTab('staff')" id="nav-staff" class="admin-nav nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="text-[9px] font-bold">員工</span></button>
+        <button onclick="switchMainTab('list')" id="nav-list" class="admin-nav nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg><span class="text-[9px] font-bold">明細</span></button>
     </nav>
 
     <!-- Modal (General - Highest Z-Index) -->
@@ -310,11 +330,24 @@
                     <input id="st-email" type="email" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50" placeholder="example@gmail.com">
                 </div>
                 <div>
+                    <label class="text-xs text-stone-500 font-bold uppercase">主要分店</label>
+                    <select id="st-store" onchange="updateSupportEligibility()" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50 outline-none"></select>
+                </div>
+                <div>
                     <label class="text-xs text-stone-500 font-bold uppercase">職稱 Role</label>
-                    <select id="st-role" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50 outline-none">
-                        <option value="木白匠">木白匠 (全班別)</option>
-                        <option value="糖事人">糖事人 (僅白/晚班)</option>
+                    <select id="st-role" onchange="updateSupportEligibility()" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50 outline-none">
+                        <option value="木白匠">木白匠 (全班別／可跨店支援)</option>
+                        <option value="糖事人">糖事人 (僅單一分店)</option>
                     </select>
+                </div>
+                <div id="st-support-wrap" class="rounded-xl border border-coffee-100 bg-coffee-50 p-3">
+                    <label class="flex items-start gap-3 cursor-pointer select-none">
+                        <input id="st-support" type="checkbox" class="mt-0.5 w-4 h-4 accent-[#6f4e37]">
+                        <span>
+                            <span class="block text-sm font-bold text-coffee-800">可跨店支援</span>
+                            <span id="st-support-desc" class="block text-[11px] leading-relaxed text-stone-500 mt-0.5">勾選後可在信義店與台大店排班，員工登入後也能切換兩家店班表。</span>
+                        </span>
+                    </label>
                 </div>
                 <div><label class="text-xs text-stone-500 font-bold uppercase">代表色</label><input type="color" id="st-color" class="w-full h-10 border border-stone-200 rounded-lg mt-1 p-1 bg-white cursor-pointer" value="#a67c52"></div>
                 <div><label class="text-xs text-stone-500 font-bold uppercase">電話</label><input id="st-phone" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
@@ -367,7 +400,7 @@
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div><label class="text-xs text-stone-500 font-bold uppercase">假別</label><select id="lv-type" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"><option value="事假">事假</option><option value="病假">病假</option><option value="排休">排休</option></select></div>
-                    <div><label class="text-xs text-stone-500 font-bold uppercase">班次</label><select id="lv-period" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"><option value="all">全天</option><option value="早班">早班</option><option value="白班">白班</option><option value="晚班">晚班</option></select></div>
+                    <div><label class="text-xs text-stone-500 font-bold uppercase">班次</label><select id="lv-period" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></select></div>
                 </div>
             </div>
             <div class="p-5 bg-stone-50 border-t border-stone-100 flex gap-3">
@@ -388,11 +421,22 @@
                 <div><h4 class="text-xs font-bold text-stone-400 uppercase mb-2">當日班表</h4><div id="day-shift-list" class="space-y-2"></div></div>
                 <div><h4 class="text-xs font-bold text-stone-400 uppercase mb-2">當日請假</h4><div id="day-leave-list" class="space-y-2 text-sm text-stone-500"></div></div>
             </div>
-            <div class="p-4 bg-stone-50 border-t border-stone-100">
-                <div class="flex gap-2">
-                    <select id="day-add-emp" class="flex-1 border border-stone-200 rounded-lg p-2 text-sm outline-none"></select>
-                    <select id="day-add-shift" class="w-24 border border-stone-200 rounded-lg p-2 text-sm outline-none"><option value="早班">早班</option><option value="白班">白班</option><option value="晚班">晚班</option></select>
+            <div class="p-4 bg-stone-50 border-t border-stone-100 admin-only">
+                <div class="grid grid-cols-[1fr_120px_auto] gap-2">
+                    <select id="day-add-emp" class="border border-stone-200 rounded-lg p-2 text-sm outline-none min-w-0"></select>
+                    <select id="day-add-shift" onchange="updateDayShiftFields()" class="border border-stone-200 rounded-lg p-2 text-sm outline-none"></select>
                     <button onclick="saveDaySchedule()" class="bg-coffee-600 text-white px-3 rounded-lg text-sm font-bold shadow-sm">新增</button>
+                </div>
+                <div id="flex-time-fields" class="hidden mt-3 bg-white border border-stone-200 rounded-xl p-3 space-y-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="text-[10px] font-bold text-stone-400">上班</label><input id="flex-start" type="time" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></div>
+                        <div><label class="text-[10px] font-bold text-stone-400">下班</label><input id="flex-end" type="time" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div><label class="text-[10px] font-bold text-stone-400">休息開始（選填）</label><input id="flex-break-start" type="time" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></div>
+                        <div><label class="text-[10px] font-bold text-stone-400">休息結束（選填）</label><input id="flex-break-end" type="time" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></div>
+                    </div>
+                    <p class="text-[10px] text-stone-400">彈性班會依上、下班及休息時間自動計算計薪時數。</p>
                 </div>
             </div>
         </div>
@@ -400,13 +444,15 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import {
+            getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+            onAuthStateChanged, signOut
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import {
+            getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot,
+            setDoc, getDoc, getDocs, runTransaction
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // ============================================================
-        // ⚠️ 重要：正式上線前，請將下方的 firebaseConfig 替換為您在
-        // xuxu-helper 專案取得的真實設定！
-        // ============================================================
         const firebaseConfig = {
           apiKey: "AIzaSyATncVLAIoz28OJxLKk4zHQInSfqOvCLik",
           authDomain: "xuxu-helper.firebaseapp.com",
@@ -420,605 +466,540 @@
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        const googleProvider = new GoogleAuthProvider();
+        googleProvider.setCustomParameters({ prompt: 'select_account' });
 
-        // ============================================================
-        // 資料庫路徑設定 (Data Path)
-        // 為了在 GitHub Pages 正式運作，我們使用根目錄路徑。
-        // 如果您在預覽環境，會自動切換為沙盒路徑。
-        // ============================================================
-        const getCollection = (colName) => {
-             // 正式模式 (GitHub Pages / Vercel)
-             // 直接存取根目錄，所有登入者共享資料 (適合單一店鋪)
-             return collection(db, colName);
-        };
-
-        const getDocRef = (colName, id) => {
-             return doc(db, colName, id);
+        const STORE_CONFIG = {
+            xinyi: {
+                id: 'xinyi', name: '信義店', rent: 114597, mgmt: 5359, fixedCost: 1200000, defaultIncome: 100000,
+                shifts: [
+                    { name:'早班', code:'早', startTime:'08:00', endTime:'12:00', paidHours:4, count:1 },
+                    { name:'白班', code:'白', startTime:'11:00', endTime:'15:00', paidHours:4, count:2 },
+                    { name:'晚班', code:'晚', startTime:'15:00', endTime:'19:00', paidHours:4, count:2 }
+                ]
+            },
+            ntu: {
+                id: 'ntu', name: '台大店', rent: 0, mgmt: 0, fixedCost: 0, defaultIncome: 100000,
+                shifts: [
+                    { name:'6 小時班', code:'6', startTime:'10:00', endTime:'16:30', breakStart:'13:30', breakEnd:'14:00', paidHours:6, count:1 },
+                    { name:'8 小時班', code:'8', startTime:'10:00', endTime:'18:30', breakStart:'14:00', breakEnd:'14:30', paidHours:8, count:1 },
+                    { name:'晚班', code:'晚', startTime:'18:00', endTime:'22:00', paidHours:4, count:1 },
+                    { name:'彈性班', code:'彈', flexible:true, count:0 }
+                ]
+            }
         };
 
         const CONFIG = {
-            fixedCost: 1200000, rent: 114597, mgmt: 5359, defaultIncome: 100000,
-            items: ['豆漿', '牛奶', '鮮奶油', '紅豆', '薏仁', '紫米', '糯米', '豆皮', '芋圓', '湯圓', '木薯', '蓮藕', '砂糖', '黃冰糖', '糯米粉', '木薯澱粉'],
-            colors: ['#8B4513', '#A0522D', '#CD853F', '#D2691E', '#DEB887', '#F4A460', '#BC8F8F', '#808000'],
-            shifts: [
-                { name: '早班', code: '早', time: '08:00-12:00', start: 8, end: 12, order: 1, count: 1, color: 'text-blue-600' },
-                { name: '白班', code: '白', time: '11:00-15:00', start: 11, end: 15, order: 2, count: 2, color: 'text-yellow-600' },
-                { name: '晚班', code: '晚', time: '15:00-19:00', start: 15, end: 19, order: 3, count: 2, color: 'text-purple-600' }
-            ]
+            items: ['豆漿','牛奶','鮮奶油','紅豆','薏仁','紫米','糯米','豆皮','芋圓','湯圓','木薯','蓮藕','砂糖','黃冰糖','糯米粉','木薯澱粉'],
+            colors: ['#8B4513','#A0522D','#CD853F','#D2691E','#DEB887','#F4A460','#BC8F8F','#808000']
         };
 
-        // 2026年 台灣國定假日 (春節修正為2/16除夕開始)
         const HOLIDAYS = {
-            '2026-01-01': '元旦',
-            '2026-02-16': '除夕', '2026-02-17': '春節', '2026-02-18': '春節', '2026-02-19': '春節', '2026-02-20': '春節',
-            '2026-02-28': '228',
-            '2026-04-03': '清明連假', '2026-04-04': '兒節', '2026-04-05': '清明', '2026-04-06': '清明連假',
-            '2026-05-01': '勞動',
-            '2026-06-19': '端午',
-            '2026-09-25': '中秋',
-            '2026-10-10': '國慶'
+            '2026-01-01':'元旦','2026-02-16':'除夕','2026-02-17':'春節','2026-02-18':'春節','2026-02-19':'春節','2026-02-20':'春節',
+            '2026-02-28':'228','2026-04-03':'清明連假','2026-04-04':'兒節','2026-04-05':'清明','2026-04-06':'清明連假',
+            '2026-05-01':'勞動','2026-06-19':'端午','2026-09-25':'中秋','2026-10-10':'國慶'
         };
 
         let state = {
-            user: null, transactions: [], employees: [], leaves: [], shifts: [], attendance: [], notices: [],
-            currentMonth: new Date().toISOString().slice(0, 7),
-            type: 'out', view: 'home', reportView: 'chart', reportPeriod: 'month',
-            selectedDate: null, leaveMode: 'single', listTab: 'tx'
+            user:null, accessRole:null, employeeProfile:null, storeId:null, accessibleStoreIds:[], unsubs:[],
+            transactions:[], employees:[], leaves:[], shifts:[], attendance:[], notices:[],
+            currentMonth:new Date().toISOString().slice(0,7), type:'out', view:'home', reportView:'chart', reportPeriod:'month',
+            selectedDate:null, leaveMode:'single', listTab:'tx'
         };
 
-        const setText = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = val; }
-        const getEl = (id) => document.getElementById(id);
-        const formatMoney = (n) => new Intl.NumberFormat('zh-TW', {style:'currency', currency: 'TWD', maximumFractionDigits: 0}).format(n);
+        const getEl = id => document.getElementById(id);
+        const setText = (id,val) => { const el=getEl(id); if(el) el.textContent=val; };
+        const formatMoney = n => new Intl.NumberFormat('zh-TW',{style:'currency',currency:'TWD',maximumFractionDigits:0}).format(Number(n)||0);
+        const normalizeEmail = email => String(email||'').trim().toLowerCase();
+        const taipeiToday = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+        const isAdmin = () => state.accessRole === 'admin';
+        const validStoreIds = ids => [...new Set((Array.isArray(ids)?ids:[]).filter(id=>STORE_CONFIG[id]))];
+        const profileStoreIds = profile => {
+            const ids=validStoreIds(profile?.storeIds);
+            if(ids.length)return ids;
+            return profile?.storeId&&STORE_CONFIG[profile.storeId]?[profile.storeId]:[];
+        };
+        const employeeStoreIds = emp => {
+            const ids=validStoreIds(emp?.storeIds);
+            if(ids.length)return ids;
+            const id=emp?.primaryStoreId||emp?.storeId||state.storeId;
+            return id&&STORE_CONFIG[id]?[id]:[];
+        };
+        const currentStore = () => STORE_CONFIG[state.storeId] || STORE_CONFIG.xinyi;
+        const getCollection = (colName, storeId=state.storeId) => collection(db,'stores',storeId,colName);
+        const getDocRef = (colName,id,storeId=state.storeId) => doc(db,'stores',storeId,colName,id);
+        const matchesEmployee = (record, emp) => record.employeeId ? record.employeeId===emp.id : record.name===emp.name;
 
-        const initAuth = async () => {
-            // 嘗試使用匿名登入以存取資料庫 (需確認 Firebase Console 已開啟匿名登入)
-            // 自動修復：如果自訂 Token 失敗（因設定檔不符），則自動轉為匿名登入
+        function showAuth(mode, message, detail='') {
+            const screen=getEl('auth-screen'), login=getEl('google-login-btn'), claim=getEl('claim-owner-btn'), logout=getEl('auth-logout-btn');
+            screen.classList.remove('hidden'); setText('auth-message',message); setText('auth-detail',detail);
+            login.classList.toggle('hidden', mode!=='login');
+            claim.classList.toggle('hidden', mode!=='claim');
+            logout.classList.toggle('hidden', mode==='login');
+        }
+
+        window.googleLogin = async () => {
+            try { await signInWithPopup(auth, googleProvider); }
+            catch (err) {
+                if(['auth/popup-blocked','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(err.code)) await signInWithRedirect(auth,googleProvider);
+                else Modal.show({type:'alert',title:'登入失敗',message:err.message});
+            }
+        };
+        window.logoutApp = async () => { await signOut(auth); location.reload(); };
+
+        window.claimFirstOwner = async () => {
+            if(!state.user) return;
+            const ref=doc(db,'settings','app');
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                     await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                     throw new Error('No token');
-                }
-            } catch (e) {
-                console.log("Token auth failed, falling back to anonymous:", e);
-                await signInAnonymously(auth);
-            }
-        };
-        initAuth();
-
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                state.user = user;
-                const collections = ['transactions', 'employees', 'leaves', 'shifts', 'attendance', 'notices'];
-                collections.forEach(col => {
-                    onSnapshot(getCollection(col), (snapshot) => {
-                        const data = []; snapshot.forEach((doc) => data.push({ id: doc.id, ...doc.data() }));
-                        if(col === 'transactions' || col === 'attendance' || col === 'notices') data.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-                        state[col] = data;
-                        
-                        if(col === 'transactions') checkLoad();
-                        
-                        // Re-render
-                        if(state.view === 'report') renderReport();
-                        else if(state.view === 'staff') renderStaff();
-                        else if(state.view === 'schedule') renderSchedule();
-                        else if(state.view === 'home') { render(); renderNotices(); }
-                        else if(state.view === 'list') { renderList(); render(); }
-                        
-                        if(!getEl('day-modal').classList.contains('hidden') && state.selectedDate) openDayModal(state.selectedDate);
-                    });
+                await runTransaction(db, async tx => {
+                    const snap=await tx.get(ref);
+                    if(snap.exists()) throw new Error('管理員已建立，請重新登入。');
+                    tx.set(ref,{ownerUid:state.user.uid,ownerEmail:normalizeEmail(state.user.email),createdAt:Date.now()});
                 });
-            }
+                await resolveAccess(state.user);
+            } catch(err) { Modal.show({type:'alert',title:'無法建立管理員',message:err.message}); }
+        };
+
+        onAuthStateChanged(auth, async user => {
+            state.user=user;
+            if(!user) { showAuth('login','請使用已登記的 Google 帳號登入。','管理員需先在員工資料中填入員工的 Google Email。'); return; }
+            await resolveAccess(user);
         });
 
-        const checkLoad = () => {
-            const overlay = getEl('loading-overlay');
-            if (overlay) { overlay.classList.add('opacity-0'); setTimeout(() => { if(overlay && overlay.parentNode) overlay.remove(); }, 300); }
+        async function resolveAccess(user) {
+            const appRef=doc(db,'settings','app');
+            const appSnap=await getDoc(appRef);
+            if(!appSnap.exists()) {
+                showAuth('claim',`目前尚未建立管理員。登入帳號：${user.email}`,'請由店主本人按下按鈕；第一位管理員建立後，其他帳號不能再次認領。');
+                return;
+            }
+            if(appSnap.data().ownerUid===user.uid) {
+                await startSession('admin','xinyi',null); return;
+            }
+            const email=normalizeEmail(user.email);
+            const dirSnap=await getDoc(doc(db,'employeeDirectory',email));
+            if(dirSnap.exists() && dirSnap.data().active!==false) {
+                const profile={id:dirSnap.id,...dirSnap.data()};
+                const stores=profileStoreIds(profile);
+                await startSession('employee',profile.primaryStoreId||profile.storeId||stores[0],profile); return;
+            }
+            showAuth('denied',`此 Google 帳號尚未被加入員工名單：${user.email}`,'請管理員在「員工」頁新增資料並填入完全相同的 Google Email。');
+        }
+
+        async function startSession(role, storeId, profile) {
+            state.accessRole=role; state.employeeProfile=profile;
+            state.accessibleStoreIds=isAdmin()?Object.keys(STORE_CONFIG):profileStoreIds(profile);
+            if(!state.accessibleStoreIds.length)state.accessibleStoreIds=[storeId||'xinyi'];
+            getEl('auth-screen').classList.add('hidden');
+            populateStoreSelectors();
+            applyRoleUI();
+            await changeStoreInternal(storeId||state.accessibleStoreIds[0]);
+            window.switchMainTab(role==='admin'?'home':'schedule');
+            setTimeout(checkLoad,500);
+        }
+
+        function applyRoleUI() {
+            document.querySelectorAll('.admin-only').forEach(el=>el.classList.toggle('hidden',!isAdmin()));
+            document.querySelectorAll('.admin-nav').forEach(el=>el.classList.toggle('hidden',!isAdmin()));
+            const canSwitch=isAdmin()||state.accessibleStoreIds.length>1;
+            getEl('store-select').classList.toggle('hidden',!canSwitch);
+            getEl('store-badge').classList.toggle('hidden',canSwitch);
+            const job=state.employeeProfile?.jobRole||'';
+            setText('user-summary',`${state.user?.email||''}｜${isAdmin()?'管理員':(job||'員工')}`);
+        }
+
+        function populateStoreSelectors() {
+            const select=getEl('store-select'); select.innerHTML='';
+            const allowed=isAdmin()?Object.keys(STORE_CONFIG):state.accessibleStoreIds;
+            allowed.forEach(id=>{const store=STORE_CONFIG[id];if(!store)return;const o=document.createElement('option');o.value=store.id;o.textContent=store.name;select.appendChild(o);});
+            const staffStore=getEl('st-store'); staffStore.innerHTML='';
+            Object.values(STORE_CONFIG).forEach(store=>{ const o=document.createElement('option');o.value=store.id;o.textContent=store.name;staffStore.appendChild(o); });
+        }
+
+        window.updateSupportEligibility = () => {
+            const role=getEl('st-role')?.value;
+            const box=getEl('st-support'),wrap=getEl('st-support-wrap'),desc=getEl('st-support-desc');
+            if(!box||!wrap)return;
+            const eligible=role==='木白匠';
+            box.disabled=!eligible;
+            if(!eligible)box.checked=false;
+            wrap.classList.toggle('opacity-50',!eligible);
+            wrap.classList.toggle('bg-stone-50',!eligible);
+            wrap.classList.toggle('bg-coffee-50',eligible);
+            if(desc)desc.textContent=eligible?'勾選後可在信義店與台大店排班，員工登入後也能切換兩家店班表。':'糖事人不具跨店支援資格，只能綁定主要分店。';
         };
 
-        const getRange=(p,a)=>{const y=parseInt(a.slice(0,4)),m=parseInt(a.slice(5,7));const fmt=(y,m)=>`${y}-${String(m).padStart(2,'0')}`;if(p==='month'){const pm=m===1?12:m-1,py=m===1?y-1:y;return{start:fmt(y,m),end:fmt(y,m),pStart:fmt(py,pm),pEnd:fmt(py,pm)}}else if(p==='year'){return{start:fmt(y,1),end:fmt(y,12),pStart:fmt(y-1,1),pEnd:fmt(y-1,12)}}return{start:fmt(y,m),end:fmt(y,m),pStart:fmt(y,m),pEnd:fmt(y,m)};}; 
-        const calcStats=(txs,s,e)=>{const rel=txs.filter(t=>t.date.slice(0,7)>=s&&t.date.slice(0,7)<=e);let i=0,ex=0,st={};rel.forEach(t=>{if(t.type==='in')i+=t.amount;else{ex+=t.amount;if(t.cat==='stock'){if(!st[t.name])st[t.name]={qty:0,cost:0,unit:t.unit};st[t.name].qty+=(t.qty||0);st[t.name].cost+=t.amount;}}});return{inc:i,exp:ex,net:i-ex,stock:st,txs:rel};};
+        window.changeStore = async storeId => {
+            if(!isAdmin()&&!state.accessibleStoreIds.includes(storeId)) return;
+            await changeStoreInternal(storeId);
+        };
 
-        function getDistanceFromLatLonInKm(lat1,lon1,lat2,lon2) {
-            const R = 6371; const dLat = deg2rad(lat2-lat1); const dLon = deg2rad(lon2-lon1);
-            const a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * Math.sin(dLon/2)*Math.sin(dLon/2);
-            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        async function changeStoreInternal(storeId) {
+            const allowed=isAdmin()?Object.keys(STORE_CONFIG):state.accessibleStoreIds;
+            if(!STORE_CONFIG[storeId]||!allowed.includes(storeId)) storeId=allowed[0]||'xinyi';
+            state.unsubs.forEach(fn=>fn()); state.unsubs=[];
+            state.storeId=storeId;
+            ['transactions','employees','leaves','shifts','attendance','notices'].forEach(k=>state[k]=[]);
+            getEl('store-select').value=storeId;
+            setText('store-badge',currentStore().name);
+            setText('app-title',`${currentStore().name}｜煦煦木白`);
+            setText('schedule-title',`${currentStore().name}本月班表`);
+            renderShiftLegend(); populateShiftOptions();
+            const cols=isAdmin()?['transactions','employees','leaves','shifts','attendance','notices']:['shifts','leaves','notices'];
+            cols.forEach(col=>{
+                const unsub=onSnapshot(getCollection(col),snap=>{
+                    const data=[]; snap.forEach(d=>data.push({id:d.id,...d.data()}));
+                    if(['transactions','attendance','notices'].includes(col)) data.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+                    state[col]=data;
+                    rerenderCurrentView();
+                    if(!getEl('day-modal').classList.contains('hidden') && state.selectedDate && isAdmin()) openDayModal(state.selectedDate);
+                    checkLoad();
+                },err=>Modal.show({type:'alert',title:'資料讀取失敗',message:err.message}));
+                state.unsubs.push(unsub);
+            });
         }
-        function deg2rad(deg) { return deg * (Math.PI/180); }
+
+        function rerenderCurrentView() {
+            if(state.view==='report') renderReport();
+            else if(state.view==='staff') renderStaff();
+            else if(state.view==='schedule') renderSchedule();
+            else if(state.view==='home'){render();renderNotices();}
+            else if(state.view==='list'){render();renderList();}
+        }
+
+        function checkLoad() {
+            const overlay=getEl('loading-overlay');
+            if(overlay){overlay.classList.add('opacity-0');setTimeout(()=>overlay.remove(),250);}
+        }
+
+        function renderShiftLegend() {
+            const el=getEl('shift-legend'); if(!el)return; el.innerHTML='';
+            currentStore().shifts.forEach(s=>{
+                const span=document.createElement('span');span.className='flex items-center gap-1 bg-stone-50 border border-stone-200 px-2 py-1 rounded-full';
+                const rest=s.breakStart?`｜休 ${s.breakStart}–${s.breakEnd}`:'';
+                span.textContent=s.flexible?`${s.code} 彈性輸入`:`${s.code} ${s.startTime}–${s.endTime}${rest}`;
+                el.appendChild(span);
+            });
+        }
+
+        function populateShiftOptions() {
+            const day=getEl('day-add-shift'); day.innerHTML='';
+            currentStore().shifts.forEach(s=>{const o=document.createElement('option');o.value=s.name;o.textContent=s.name;day.appendChild(o);});
+            const period=getEl('lv-period'); period.innerHTML='<option value="all">全天</option>';
+            currentStore().shifts.forEach(s=>{const o=document.createElement('option');o.value=s.name;o.textContent=s.name;period.appendChild(o);});
+            window.updateDayShiftFields();
+        }
+
+        window.updateDayShiftFields = () => {
+            const def=currentStore().shifts.find(s=>s.name===getEl('day-add-shift').value);
+            getEl('flex-time-fields').classList.toggle('hidden',!(def&&def.flexible));
+        };
+
+        const getRange=(p,a)=>{const y=parseInt(a.slice(0,4)),m=parseInt(a.slice(5,7));const fmt=(yy,mm)=>`${yy}-${String(mm).padStart(2,'0')}`;if(p==='month'){const pm=m===1?12:m-1,py=m===1?y-1:y;return{start:fmt(y,m),end:fmt(y,m),pStart:fmt(py,pm),pEnd:fmt(py,pm)}}if(p==='year')return{start:fmt(y,1),end:fmt(y,12),pStart:fmt(y-1,1),pEnd:fmt(y-1,12)};return{start:fmt(y,m),end:fmt(y,m),pStart:fmt(y,m),pEnd:fmt(y,m)}};
+        const calcStats=(txs,s,e)=>{const rel=txs.filter(t=>t.date?.slice(0,7)>=s&&t.date?.slice(0,7)<=e);let i=0,ex=0,st={};rel.forEach(t=>{if(t.type==='in')i+=Number(t.amount)||0;else{ex+=Number(t.amount)||0;if(t.cat==='stock'){if(!st[t.name])st[t.name]={qty:0,cost:0,unit:t.unit};st[t.name].qty+=(Number(t.qty)||0);st[t.name].cost+=Number(t.amount)||0;}}});return{inc:i,exp:ex,net:i-ex,stock:st,txs:rel};};
+        const timeToMinutes=t=>{if(!t)return null;const [h,m]=t.split(':').map(Number);return h*60+m;};
+        const calcPaidHours=(start,end,bs,be)=>{const a=timeToMinutes(start),b=timeToMinutes(end);if(a===null||b===null||b<=a)return 0;let mins=b-a;const c=timeToMinutes(bs),d=timeToMinutes(be);if(c!==null&&d!==null&&d>c)mins-=d-c;return Math.max(0,Math.round((mins/60)*100)/100);};
+        const getShiftDef=name=>currentStore().shifts.find(s=>s.name===name);
+        const getShiftMeta=s=>{const d=getShiftDef(s.shift)||{};return{startTime:s.startTime||d.startTime,endTime:s.endTime||d.endTime,breakStart:s.breakStart||d.breakStart||'',breakEnd:s.breakEnd||d.breakEnd||'',paidHours:Number(s.paidHours??d.paidHours??4),code:s.code||d.code||'班'};};
+        const shiftTimeText=s=>{const m=getShiftMeta(s);const rest=m.breakStart?`｜休 ${m.breakStart}–${m.breakEnd}`:'';return `${m.startTime||''}–${m.endTime||''}${rest}`;};
+        const overlaps=(a,b)=>{const as=timeToMinutes(getShiftMeta(a).startTime),ae=timeToMinutes(getShiftMeta(a).endTime),bs=timeToMinutes(getShiftMeta(b).startTime),be=timeToMinutes(getShiftMeta(b).endTime);return [as,ae,bs,be].every(v=>v!==null)&&as<be&&ae>bs;};
 
         window.simulateCheckIn = async () => {
-             if(!state.employees.length) return Modal.show({type:'alert', message:'無員工資料'});
-             const emp = state.employees[0];
-             const now = new Date();
-             const timeStr = now.toLocaleTimeString('zh-TW', {hour:'2-digit', minute:'2-digit'});
-             await addDoc(getCollection('attendance'), {
-                 name: emp.name, date: now.toISOString().slice(0,10), time: timeStr, status: '準時', createdAt: Date.now()
-             });
-             Modal.show({type:'alert', message:`[模擬] ${emp.name} 於 ${timeStr} 打卡成功！`});
+            if(!isAdmin())return;
+            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無員工資料'});
+            const emp=state.employees[0],now=new Date(),timeStr=now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
+            await addDoc(getCollection('attendance'),{employeeId:emp.id,name:emp.name,email:emp.email||'',date:now.toISOString().slice(0,10),time:timeStr,status:'準時',createdAt:Date.now()});
+            Modal.show({type:'alert',message:`[模擬] ${emp.name} 於 ${timeStr} 打卡成功！`});
         };
 
-        // --- Notices ---
         window.addNotice = () => {
-             getEl('modal-notice-inputs').classList.remove('hidden');
-             Modal.show({
-                 type: 'notice', // Special type for notice inputs
-                 title: '發布公告',
-                 message: '請輸入內容',
-                 onConfirm: async () => {
-                    const title = getEl('notice-title').value;
-                    const content = getEl('notice-content').value;
-                    const priority = getEl('notice-priority').value;
-                    if(!title || !content) return;
-                    await addDoc(getCollection('notices'), {
-                        title, content, priority, date: new Date().toISOString().slice(0,10), createdAt: Date.now()
-                    });
-                    getEl('notice-title').value = ''; getEl('notice-content').value = '';
-                    getEl('modal-notice-inputs').classList.add('hidden');
-                 }
-             });
+            if(!isAdmin())return;
+            getEl('modal-notice-inputs').classList.remove('hidden');
+            Modal.show({type:'notice',title:`發布${currentStore().name}公告`,message:'請輸入內容',onConfirm:async()=>{
+                const title=getEl('notice-title').value,content=getEl('notice-content').value,priority=getEl('notice-priority').value;
+                if(!title||!content)return;
+                await addDoc(getCollection('notices'),{title,content,priority,date:new Date().toISOString().slice(0,10),createdAt:Date.now()});
+                getEl('notice-title').value='';getEl('notice-content').value='';
+            }});
         };
+        window.deleteNotice=id=>{if(!isAdmin())return;Modal.show({type:'confirm',title:'刪除公告',message:'確定要刪除此公告嗎？',onConfirm:()=>deleteDoc(getDocRef('notices',id))});};
+        function renderNotices(){const list=getEl('notice-list');if(!list)return;list.innerHTML='';getEl('notice-empty').classList.toggle('hidden',state.notices.length>0);state.notices.forEach(n=>{const d=document.createElement('div');d.className=`notice-card ${n.priority} relative`;d.innerHTML=`<div class="flex justify-between items-start"><div><h4 class="font-bold text-sm text-coffee-800">${n.title}</h4><span class="text-[10px] text-stone-400">${n.date}</span></div><button onclick="deleteNotice('${n.id}')" class="admin-only text-stone-300 p-1">✕</button></div><p class="text-xs text-stone-600 mt-1">${n.content}</p>`;list.appendChild(d);});applyRoleUI();}
 
-        window.deleteNotice = async (id) => {
-            Modal.show({
-                type: 'confirm',
-                title: '刪除公告',
-                message: '確定要刪除此公告嗎？',
-                onConfirm: async () => {
-                    await deleteDoc(getDocRef('notices', id));
+        async function findCrossStoreConflict(emp,date,candidate) {
+            const ids=employeeStoreIds(emp).filter(id=>id!==state.storeId);
+            for(const storeId of ids){
+                const snap=await getDocs(getCollection('shifts',storeId));
+                for(const d of snap.docs){
+                    const s={id:d.id,...d.data()};
+                    const sameEmployee=s.employeeId? s.employeeId===emp.id : normalizeEmail(s.email)===normalizeEmail(emp.email);
+                    if(s.date===date&&sameEmployee&&overlaps(s,candidate))return {...s,storeId};
                 }
-            });
-        };
-
-        function renderNotices() {
-            const list = getEl('notice-list'); if(!list) return; list.innerHTML = '';
-            if(state.notices.length === 0) getEl('notice-empty').classList.remove('hidden');
-            else {
-                getEl('notice-empty').classList.add('hidden');
-                state.notices.forEach(n => {
-                    const div = document.createElement('div');
-                    div.className = `notice-card ${n.priority} relative group`;
-                    div.innerHTML = `
-                        <div class="flex justify-between items-start mb-1">
-                            <div class="flex-1">
-                                <h4 class="font-bold text-sm text-coffee-800">${n.title}</h4>
-                                <span class="text-[10px] text-stone-400 block">${n.date}</span>
-                            </div>
-                            <button onclick="deleteNotice('${n.id}')" class="text-stone-300 hover:text-red-500 p-1 -mt-1 -mr-1 transition-colors">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                            </button>
-                        </div>
-                        <p class="text-xs text-stone-600 mt-1">${n.content}</p>`;
-                    list.appendChild(div);
-                });
             }
+            return null;
         }
 
-        // --- Staff ---
-        window.addEmployee = () => { getEl('st-name').value=''; getEl('st-color').value='#a67c52'; getEl('st-email').value=''; getEl('staff-modal').classList.remove('hidden'); };
-        window.saveEmployee = async () => { 
-            const name=getEl('st-name').value; const color=getEl('st-color').value; const role=getEl('st-role').value; const email=getEl('st-email').value;
-            if(!name) return Modal.show({type:'alert',message:'請輸入姓名'}); 
-            const data={name, role, color, email, phone:getEl('st-phone').value, addr:getEl('st-addr').value, emer:getEl('st-emer').value, date:getEl('st-date').value, wage:Number(getEl('st-wage').value)}; 
-            await addDoc(getCollection('employees'), data); 
-            getEl('staff-modal').classList.add('hidden'); 
-        };
-        window.deleteStaff = async (id) => { 
-            Modal.show({type:'confirm',message:'刪除員工?',onConfirm:async()=>{
-                await deleteDoc(getDocRef('employees', id));
-            }}); 
-        };
-        
-        window.addLeave = () => { if(state.employees.length===0) return Modal.show({type:'alert',message:'無員工'}); const sel=getEl('lv-emp'); sel.innerHTML=''; state.employees.forEach(e=>{const o=document.createElement('option');o.value=e.name;o.textContent=e.name;sel.appendChild(o);}); window.switchLeaveMode('single'); getEl('leave-modal').classList.remove('hidden'); };
-        window.switchLeaveMode = (m) => { state.leaveMode=m; ['single','range','recurring'].forEach(k=>{const btn=getEl('lm-'+k); if(k===m){btn.classList.add('bg-white','shadow-sm','text-coffee-800');btn.classList.remove('text-stone-400');}else{btn.classList.remove('bg-white','shadow-sm','text-coffee-800');btn.classList.add('text-stone-400');}}); if(m==='single'){getEl('lv-date-single').classList.remove('hidden');getEl('lv-date-range').classList.add('hidden');getEl('lv-weekdays').classList.add('hidden');}else{getEl('lv-date-single').classList.add('hidden');getEl('lv-date-range').classList.remove('hidden'); if(m==='recurring') getEl('lv-weekdays').classList.remove('hidden'); else getEl('lv-weekdays').classList.add('hidden');} };
-        
-        window.saveLeave = async () => { 
-            const name=getEl('lv-emp').value, type=getEl('lv-type').value, period=getEl('lv-period').value; 
-            const leaves=[];
-            if(state.leaveMode==='single'){
-                const d=getEl('lv-date').value; if(!d)return Modal.show({type:'alert',message:'請選日期'}); leaves.push(d);
-            } else {
-                const s=getEl('lv-start').value, e=getEl('lv-end').value; if(!s||!e)return Modal.show({type:'alert',message:'請選日期'});
-                const start=new Date(s), end=new Date(e);
-                for(let dt=start; dt<=end; dt.setDate(dt.getDate()+1)){
-                    if(state.leaveMode==='recurring'){ const day=dt.getDay(); if(!getEl('wd-'+day).checked) continue; }
-                    leaves.push(dt.toISOString().slice(0,10));
-                }
+        async function loadExternalMonthShifts() {
+            const map=new Map();
+            const supportEmployees=state.employees.filter(emp=>employeeStoreIds(emp).length>1);
+            const stores=[...new Set(supportEmployees.flatMap(emp=>employeeStoreIds(emp)).filter(id=>id!==state.storeId))];
+            for(const storeId of stores){
+                const snap=await getDocs(getCollection('shifts',storeId));
+                snap.forEach(d=>{
+                    const s={id:d.id,storeId,...d.data()};
+                    if(!s.date?.startsWith(state.currentMonth))return;
+                    const key=s.employeeId||normalizeEmail(s.email);
+                    if(!map.has(key))map.set(key,[]);
+                    map.get(key).push(s);
+                });
             }
-            if(leaves.length===0) return Modal.show({type:'alert',message:'無有效日期'});
-            
-            for(const d of leaves) {
-                const existing = state.leaves.find(l => l.name === name && l.date === d);
-                if (existing) {
-                    if (existing.period === 'all' || period === 'all' || existing.period === period) {
-                        return Modal.show({type:'alert',message:`${d} 該員工已有請假紀錄 (${existing.period})，無法重複登記。`});
-                    }
+            return map;
+        }
+
+        window.addEmployee = () => {
+            if(!isAdmin())return;
+            ['st-name','st-email','st-phone','st-addr','st-emer','st-date'].forEach(id=>getEl(id).value='');
+            getEl('st-color').value='#a67c52';getEl('st-wage').value='210';getEl('st-store').value=state.storeId;getEl('st-role').value='木白匠';getEl('st-support').checked=false;
+            window.updateSupportEligibility();
+            getEl('staff-modal').classList.remove('hidden');
+        };
+        window.saveEmployee = async () => {
+            if(!isAdmin())return;
+            const name=getEl('st-name').value.trim(),email=normalizeEmail(getEl('st-email').value),primaryStoreId=getEl('st-store').value,jobRole=getEl('st-role').value;
+            const crossStore=jobRole==='木白匠'&&getEl('st-support').checked;
+            const requestedStoreIds=crossStore?Object.keys(STORE_CONFIG):[primaryStoreId];
+            if(!name)return Modal.show({type:'alert',message:'請輸入姓名'});
+            if(!email||!email.includes('@'))return Modal.show({type:'alert',message:'請輸入員工實際使用的 Google Email'});
+            if(getEl('st-support').checked&&jobRole!=='木白匠')return Modal.show({type:'alert',message:'只有木白匠具備跨店支援資格。'});
+
+            const directoryRef=doc(db,'employeeDirectory',email);
+            const existing=await getDoc(directoryRef);
+
+            // 同一個 Google 帳號已存在時：木白匠可直接合併成跨店員工，不必刪除重建。
+            if(existing.exists()){
+                const old=existing.data();
+                const oldRole=old.jobRole||old.employeeRole||old.staffRole||'';
+                const oldStoreIds=profileStoreIds(old);
+                const oldStoreText=oldStoreIds.map(id=>STORE_CONFIG[id]?.name||id).join('、')||'其他分店';
+
+                if(oldRole!=='木白匠'||jobRole!=='木白匠'){
+                    return Modal.show({type:'alert',message:`此 Google Email 已綁定「${old.name||'其他員工'}／${oldStoreText}」。\n只有木白匠可以加入第二家店支援。`});
                 }
+
+                const targetStoreIds=[...new Set([...oldStoreIds,...requestedStoreIds])].filter(id=>STORE_CONFIG[id]);
+                if(targetStoreIds.length===oldStoreIds.length&&targetStoreIds.every(id=>oldStoreIds.includes(id))){
+                    return Modal.show({type:'alert',message:`${old.name||name} 已經在「${oldStoreText}」的員工名單中。\n若要支援另一家店，請選擇另一分店，或勾選「可跨店支援」。`});
+                }
+
+                const employeeId=old.employeeId;
+                if(!employeeId)return Modal.show({type:'alert',title:'資料異常',message:'此帳號缺少員工識別碼，請先刪除舊員工資料後重新建立。'});
+                const primary=old.primaryStoreId||old.storeId||oldStoreIds[0]||primaryStoreId;
+                const sourceStore=oldStoreIds[0]||primary;
+                const sourceSnap=await getDoc(doc(db,'stores',sourceStore,'employees',employeeId));
+                const source=sourceSnap.exists()?sourceSnap.data():{};
+                const targetText=targetStoreIds.map(id=>STORE_CONFIG[id]?.name||id).join('、');
+
+                return Modal.show({
+                    type:'confirm',
+                    title:'開啟跨店支援',
+                    message:`此 Google Email 目前綁定「${old.name||name}／${oldStoreText}」。\n\n確定將他設為跨店木白匠，並加入「${STORE_CONFIG[primaryStoreId]?.name||primaryStoreId}」嗎？`,
+                    onConfirm:async()=>{
+                        const base={
+                            ...source,
+                            name:old.name||source.name||name,
+                            email,
+                            primaryStoreId:primary,
+                            storeIds:targetStoreIds,
+                            role:'木白匠',
+                            crossStoreSupport:true,
+                            color:source.color||getEl('st-color').value,
+                            phone:source.phone||getEl('st-phone').value,
+                            addr:source.addr||getEl('st-addr').value,
+                            emer:source.emer||getEl('st-emer').value,
+                            date:source.date||getEl('st-date').value,
+                            wage:Number(source.wage)||Number(getEl('st-wage').value)||210,
+                            updatedAt:Date.now()
+                        };
+                        delete base.id;
+                        for(const storeId of targetStoreIds){
+                            await setDoc(doc(db,'stores',storeId,'employees',employeeId),{...base,storeId},{merge:true});
+                        }
+                        await setDoc(directoryRef,{
+                            employeeId,
+                            name:base.name,
+                            email,
+                            primaryStoreId:primary,
+                            storeId:primary,
+                            storeIds:targetStoreIds,
+                            jobRole:'木白匠',
+                            role:'employee',
+                            crossStoreSupport:true,
+                            active:true,
+                            updatedAt:Date.now()
+                        },{merge:true});
+                        getEl('staff-modal').classList.add('hidden');
+                        Modal.show({type:'alert',message:`已將 ${base.name} 設為跨店木白匠。\n可排班分店：${targetText}。`});
+                    }
+                });
             }
 
-            const col=getCollection('leaves');
-            Modal.show({type:'alert',message:`正在建立 ${leaves.length} 筆請假...`,autoClose:1000});
-            for(const d of leaves) await addDoc(col, {name, date:d, type, period});
+            const storeIds=requestedStoreIds;
+            const base={name,email,primaryStoreId,storeIds,role:jobRole,crossStoreSupport:crossStore,color:getEl('st-color').value,phone:getEl('st-phone').value,addr:getEl('st-addr').value,emer:getEl('st-emer').value,date:getEl('st-date').value,wage:Number(getEl('st-wage').value)||210,createdAt:Date.now()};
+            const seedRef=doc(collection(db,'stores',primaryStoreId,'employees'));
+            const employeeId=seedRef.id;
+            for(const storeId of storeIds)await setDoc(doc(db,'stores',storeId,'employees',employeeId),{...base,storeId});
+            await setDoc(directoryRef,{employeeId,name,email,primaryStoreId,storeId:primaryStoreId,storeIds,jobRole,role:'employee',crossStoreSupport:crossStore,active:true,createdAt:Date.now()});
+            getEl('staff-modal').classList.add('hidden');
+            const storeText=storeIds.map(id=>STORE_CONFIG[id].name).join('、');
+            Modal.show({type:'alert',message:`已新增 ${name}。可排班分店：${storeText}。`});
+        };
+        window.deleteStaff = id => {
+            if(!isAdmin())return;
+            const emp=state.employees.find(e=>e.id===id);
+            Modal.show({type:'confirm',message:`刪除員工「${emp?.name||''}」？跨店員工會從所有分店一併移除。`,onConfirm:async()=>{
+                for(const storeId of employeeStoreIds(emp))await deleteDoc(getDocRef('employees',id,storeId));
+                if(emp?.email)await deleteDoc(doc(db,'employeeDirectory',normalizeEmail(emp.email)));
+            }});
+        };
+
+        window.toggleCrossStoreSupport = id => {
+            if(!isAdmin())return;
+            const emp=state.employees.find(e=>e.id===id);
+            if(!emp)return;
+            if(emp.role!=='木白匠')return Modal.show({type:'alert',message:'只有木白匠具備跨店支援資格。'});
+            if(!emp.email)return Modal.show({type:'alert',message:'請先確認此員工已綁定 Google Email。'});
+            const currentIds=employeeStoreIds(emp);
+            const enabling=currentIds.length<2;
+            const primaryStoreId=emp.primaryStoreId||emp.storeId||state.storeId;
+            const targetIds=enabling?Object.keys(STORE_CONFIG):[primaryStoreId];
+            const removedIds=Object.keys(STORE_CONFIG).filter(storeId=>!targetIds.includes(storeId));
+            const action=enabling?'開啟':'取消';
+            Modal.show({type:'confirm',title:`${action}跨店支援`,message:enabling?`確定讓 ${emp.name} 同時支援信義店與台大店？`:`確定取消 ${emp.name} 的跨店支援？取消後只保留主要分店「${STORE_CONFIG[primaryStoreId]?.name||primaryStoreId}」。`,onConfirm:async()=>{
+                if(!enabling){
+                    const today=taipeiToday();
+                    for(const storeId of removedIds){
+                        const snap=await getDocs(getCollection('shifts',storeId));
+                        const future=snap.docs.map(d=>d.data()).find(x=>x.employeeId===emp.id&&x.date>=today);
+                        if(future)return Modal.show({type:'alert',title:'尚有支援班次',message:`${emp.name} 在${STORE_CONFIG[storeId]?.name||storeId}仍有 ${future.date} 的未來班次。請先刪除該班次，再取消跨店支援。`});
+                    }
+                }
+                const base={...emp,primaryStoreId,storeIds:targetIds,crossStoreSupport:enabling,role:'木白匠'};
+                delete base.id;
+                for(const storeId of targetIds)await setDoc(doc(db,'stores',storeId,'employees',emp.id),{...base,storeId},{merge:true});
+                for(const storeId of removedIds)await deleteDoc(doc(db,'stores',storeId,'employees',emp.id));
+                await setDoc(doc(db,'employeeDirectory',normalizeEmail(emp.email)),{employeeId:emp.id,name:emp.name,email:normalizeEmail(emp.email),primaryStoreId,storeId:primaryStoreId,storeIds:targetIds,jobRole:'木白匠',role:'employee',crossStoreSupport:enabling,active:true,updatedAt:Date.now()},{merge:true});
+                Modal.show({type:'alert',message:`已${action} ${emp.name} 的跨店支援。`});
+            }});
+        };
+
+        window.addLeave = () => {
+            if(!isAdmin())return;
+            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無員工'});
+            const sel=getEl('lv-emp');sel.innerHTML='';state.employees.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);});
+            populateShiftOptions();window.switchLeaveMode('single');getEl('leave-modal').classList.remove('hidden');
+        };
+        window.switchLeaveMode=m=>{state.leaveMode=m;['single','range','recurring'].forEach(k=>{const b=getEl('lm-'+k);b.classList.toggle('bg-white',k===m);b.classList.toggle('shadow-sm',k===m);b.classList.toggle('text-stone-400',k!==m);});getEl('lv-date-single').classList.toggle('hidden',m!=='single');getEl('lv-date-range').classList.toggle('hidden',m==='single');getEl('lv-weekdays').classList.toggle('hidden',m!=='recurring');};
+        window.saveLeave = async () => {
+            if(!isAdmin())return;
+            const emp=state.employees.find(e=>e.id===getEl('lv-emp').value);if(!emp)return;
+            const type=getEl('lv-type').value,period=getEl('lv-period').value,dates=[];
+            if(state.leaveMode==='single'){const d=getEl('lv-date').value;if(!d)return Modal.show({type:'alert',message:'請選日期'});dates.push(d);}else{const s=getEl('lv-start').value,e=getEl('lv-end').value;if(!s||!e)return Modal.show({type:'alert',message:'請選日期'});for(let dt=new Date(s+'T00:00:00');dt<=new Date(e+'T00:00:00');dt.setDate(dt.getDate()+1)){if(state.leaveMode==='recurring'&&!getEl('wd-'+dt.getDay()).checked)continue;dates.push(dt.toISOString().slice(0,10));}}
+            for(const date of dates){const duplicate=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===date&&(l.period==='all'||period==='all'||l.period===period));if(duplicate)return Modal.show({type:'alert',message:`${date} 已有重複請假紀錄。`});}
+            for(const date of dates)await addDoc(getCollection('leaves'),{employeeId:emp.id,name:emp.name,date,type,period,createdAt:Date.now()});
             getEl('leave-modal').classList.add('hidden');
         };
-        window.deleteLeave = async (id) => { 
-            Modal.show({type:'confirm',message:'取消請假?',onConfirm:async()=>{
-                await deleteDoc(getDocRef('leaves', id));
-            }}); 
-        };
+        window.deleteLeave=id=>{if(isAdmin())Modal.show({type:'confirm',message:'取消這筆請假？',onConfirm:()=>deleteDoc(getDocRef('leaves',id))});};
 
-        window.autoSchedule = async () => {
-            if(state.employees.length === 0) return Modal.show({ type: 'alert', message: '無員工可排班' });
-            Modal.show({
-                type: 'confirm',
-                message: `確定要為 ${state.currentMonth} 重新排班？\n(注意：舊班表將被清除並重新產生)`,
-                onConfirm: async () => {
-                    const shiftCollection = getCollection('shifts');
-                    const shiftsToDelete = state.shifts.filter(s => s.date.startsWith(state.currentMonth));
-                    for (const shift of shiftsToDelete) { await deleteDoc(getDocRef('shifts', shift.id)); }
-
-                    const [year, month] = state.currentMonth.split('-');
-                    const daysInMonth = new Date(year, month, 0).getDate();
-                    let count = 0;
-
-                    for(let d=1; d<=daysInMonth; d++) {
-                        const dateStr = `${state.currentMonth}-${String(d).padStart(2,'0')}`;
-                        let dailySchedule = []; 
-
-                        for (const shiftType of CONFIG.shifts) {
-                            const shiftStart = shiftType.start; const shiftEnd = shiftType.end; const reqStart = shiftStart - 1; 
-                            let needed = shiftType.count;
-                            
-                            for(let i=0; i<needed; i++) {
-                                const candidates = state.employees.filter(emp => {
-                                    if (shiftType.code === '早' && emp.role === '糖事人') return false; 
-                                    const leave = state.leaves.find(l => l.date === dateStr && l.name === emp.name);
-                                    if (leave) {
-                                        if (leave.period === 'all') return false;
-                                        const leaveShift = CONFIG.shifts.find(s => s.name === leave.period);
-                                        if (leaveShift && reqStart < leaveShift.end && shiftEnd > leaveShift.start) return false;
-                                    }
-                                    const workedShifts = dailySchedule.filter(s => s.name === emp.name);
-                                    if (workedShifts.length >= 2) return false; 
-
-                                    for (const worked of workedShifts) {
-                                        const workedType = CONFIG.shifts.find(s => s.name === worked.shift);
-                                        if (shiftStart < workedType.end && shiftEnd > workedType.start) return false;
-                                    }
-
-                                    let consecutive = 0;
-                                    for(let back=1; back<=6; back++) {
-                                        const pastDate = new Date(year, month-1, d-back);
-                                        const pStr = pastDate.toISOString().slice(0,10);
-                                        const workedPast = state.shifts.find(s => s.date === pStr && s.name === emp.name);
-                                        if(workedPast) consecutive++; else break;
-                                    }
-                                    if (consecutive >= 6) return false; 
-
-                                    return true;
-                                });
-
-                                if(candidates.length > 0) {
-                                    const pick = candidates[Math.floor(Math.random() * candidates.length)];
-                                    await addDoc(shiftCollection, { date: dateStr, name: pick.name, shift: shiftType.name, time: shiftType.time, code: shiftType.code });
-                                    dailySchedule.push({ name: pick.name, shift: shiftType.name });
-                                    count++;
-                                }
-                            }
-                        }
-                    }
-                    Modal.show({ type: 'alert', message: `排班完成！(新增 ${count} 班次)` });
+        window.autoSchedule = () => {
+            if(!isAdmin())return;
+            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無員工可排班'});
+            Modal.show({type:'confirm',message:`確定為 ${currentStore().name} ${state.currentMonth} 重新排班？\n舊班表會先清除；彈性班不會自動建立。`,onConfirm:async()=>{
+                for(const s of state.shifts.filter(s=>s.date.startsWith(state.currentMonth)))await deleteDoc(getDocRef('shifts',s.id));
+                const [year,month]=state.currentMonth.split('-').map(Number),days=new Date(year,month,0).getDate();let count=0;
+                const defs=currentStore().shifts.filter(s=>!s.flexible&&s.count>0);
+                const externalShifts=await loadExternalMonthShifts();
+                for(let d=1;d<=days;d++){
+                    const date=`${state.currentMonth}-${String(d).padStart(2,'0')}`,daily=[];
+                    for(const def of defs){for(let slot=0;slot<def.count;slot++){
+                        const candidates=state.employees.filter(emp=>{
+                            const leave=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===date&&(l.period==='all'||l.period===def.name));if(leave)return false;
+                            const proposed={shift:def.name,...def};if(daily.filter(s=>s.employeeId===emp.id).some(s=>overlaps(s,proposed)))return false;
+                            const external=externalShifts.get(emp.id)||externalShifts.get(normalizeEmail(emp.email))||[];
+                            if(external.some(s=>s.date===date&&overlaps(s,proposed)))return false;
+                            return true;
+                        });
+                        if(candidates.length){candidates.sort((a,b)=>daily.filter(s=>s.employeeId===a.id).length-daily.filter(s=>s.employeeId===b.id).length);const emp=candidates[0];const data={date,employeeId:emp.id,email:emp.email||'',name:emp.name,shift:def.name,code:def.code,startTime:def.startTime,endTime:def.endTime,breakStart:def.breakStart||'',breakEnd:def.breakEnd||'',paidHours:def.paidHours,time:`${def.startTime}-${def.endTime}`,createdAt:Date.now()};await addDoc(getCollection('shifts'),data);daily.push(data);count++;}
+                    }}
                 }
-            });
+                Modal.show({type:'alert',message:`排班完成，共新增 ${count} 個班次。`});
+            }});
         };
-        
-        window.clearSchedule = () => {
-             Modal.show({
-                type: 'confirm',
-                title: '清空班表',
-                message: `確定要清空 ${state.currentMonth} 的所有排班嗎？\n(此動作無法復原)`,
-                onConfirm: async () => {
-                    const shiftsToDelete = state.shifts.filter(s => s.date.startsWith(state.currentMonth));
-                    if (shiftsToDelete.length === 0) return Modal.show({ type: 'alert', message: '本月無班表可清除' });
-                    for (const shift of shiftsToDelete) { await deleteDoc(getDocRef('shifts', shift.id)); }
-                    Modal.show({ type: 'alert', message: '已清空本月班表', autoClose: 1000 });
-                }
-            });
+        window.clearSchedule=()=>{if(!isAdmin())return;Modal.show({type:'confirm',title:'清空班表',message:`確定清空 ${currentStore().name} ${state.currentMonth} 的所有班次？`,onConfirm:async()=>{for(const s of state.shifts.filter(s=>s.date.startsWith(state.currentMonth)))await deleteDoc(getDocRef('shifts',s.id));}});};
+
+        window.openDayModal = date => {
+            if(!isAdmin())return;
+            state.selectedDate=date;getEl('day-modal').classList.remove('hidden');setText('day-modal-title',`${date}｜${currentStore().name}`);
+            const sList=getEl('day-shift-list');sList.innerHTML='';const shifts=state.shifts.filter(s=>s.date===date).sort((a,b)=>(timeToMinutes(getShiftMeta(a).startTime)||0)-(timeToMinutes(getShiftMeta(b).startTime)||0));
+            if(!shifts.length)sList.innerHTML='<div class="text-xs text-stone-400 italic">本日無排班</div>';
+            shifts.forEach(s=>{const emp=state.employees.find(e=>matchesEmployee(s,e))||{color:'#a67c52'};const d=document.createElement('div');d.className='flex justify-between items-center bg-stone-50 p-2 rounded-lg border border-stone-100 text-sm';d.innerHTML=`<div class="min-w-0"><div class="flex items-center gap-2"><span class="w-2 h-2 rounded-full" style="background:${emp.color}"></span><span class="font-bold" style="color:${emp.color}">${s.name}</span><span class="text-xs text-stone-400">${s.shift}</span></div><div class="text-[10px] text-stone-400 ml-4 mt-0.5">${shiftTimeText(s)}｜計薪 ${getShiftMeta(s).paidHours}h</div></div><button onclick="deleteShift('${s.id}')" class="text-red-400 text-xs font-bold px-2 py-1 bg-red-50 rounded">刪除</button>`;sList.appendChild(d);});
+            const lList=getEl('day-leave-list');lList.innerHTML='';const leaves=state.leaves.filter(l=>l.date===date);if(!leaves.length)lList.textContent='無';leaves.forEach(l=>{const d=document.createElement('div');d.className='bg-stone-50 p-2 rounded text-xs';d.textContent=`${l.name}（${l.type}－${l.period==='all'?'全天':l.period}）`;lList.appendChild(d);});
+            const empSel=getEl('day-add-emp');empSel.innerHTML='';state.employees.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;empSel.appendChild(o);});
+            populateShiftOptions();
         };
 
-        window.openDayModal = (dateStr) => {
-            state.selectedDate = dateStr;
-            getEl('day-modal').classList.remove('hidden');
-            setText('day-modal-title', `${dateStr} 班表詳情`);
-            
-            const sList = getEl('day-shift-list'); sList.innerHTML = '';
-            // SORT SHIFTS
-            const shifts = state.shifts.filter(s => s.date === dateStr);
-            const shiftOrder = { '早班': 1, '白班': 2, '晚班': 3 };
-            shifts.sort((a, b) => (shiftOrder[a.shift] || 99) - (shiftOrder[b.shift] || 99));
-
-            if (shifts.length === 0) sList.innerHTML = '<div class="text-xs text-stone-400 italic">本日無排班</div>';
-            else {
-                shifts.forEach(s => {
-                    // Find Employee Color
-                    const emp = state.employees.find(e => e.name === s.name) || {color:'#a67c52'};
-                    const div = document.createElement('div');
-                    div.className = "flex justify-between items-center bg-stone-50 p-2 rounded-lg border border-stone-100 text-sm";
-                    div.innerHTML = `
-                        <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full" style="background-color:${emp.color}"></span>
-                            <span class="font-bold" style="color:${emp.color}">${s.name}</span>
-                            <span class="text-xs text-stone-400">(${s.shift})</span>
-                        </div>
-                        <button onclick="deleteShift('${s.id}')" class="text-red-400 text-xs font-bold px-2 py-1 bg-red-50 rounded">刪除</button>
-                    `;
-                    sList.appendChild(div);
-                });
-            }
-            const lList = getEl('day-leave-list'); lList.innerHTML = '';
-            const leaves = state.leaves.filter(l => l.date === dateStr);
-            if (leaves.length === 0) lList.innerHTML = '無';
-            else {
-                leaves.forEach(l => {
-                    const div = document.createElement('div');
-                    div.className = "bg-stone-50 p-2 rounded text-stone-500 text-xs";
-                    div.textContent = `${l.name} (${l.type} - ${l.period === 'all' ? '全天' : l.period})`;
-                    lList.appendChild(div);
-                });
-            }
-            const empSel = getEl('day-add-emp'); empSel.innerHTML = '';
-            state.employees.forEach(e => { const opt = document.createElement('option'); opt.value = e.name; opt.textContent = e.name; empSel.appendChild(opt); });
-        };
-        
         window.saveDaySchedule = async () => {
-            const name = getEl('day-add-emp').value;
-            const shiftName = getEl('day-add-shift').value;
-            if (!name || !state.selectedDate) return;
-
-            // 1. 檢查請假衝突
-            const leave = state.leaves.find(l => l.date === state.selectedDate && l.name === name);
-            if (leave) {
-                if (leave.period === 'all' || leave.period === shiftName) {
-                    return Modal.show({ type: 'alert', message: `⚠️ ${name} 當天已有「${leave.period}」請假！` });
-                }
-            }
-            
-            // 2. 檢查重複排班 (同一員工當天不能有相同班次)
-            const existingSameShift = state.shifts.find(s => s.date === state.selectedDate && s.name === name && s.shift === shiftName);
-            if (existingSameShift) return Modal.show({ type: 'alert', message: `⚠️ ${name} 當天已經有「${shiftName}」了！` });
-
-            // 3. 檢查工時重疊 (防呆：早班不能接白班)
-            const shiftType = CONFIG.shifts.find(s => s.name === shiftName);
-            const dailyWork = state.shifts.filter(s => s.date === state.selectedDate && s.name === name);
-            for (const worked of dailyWork) {
-                 const workedType = CONFIG.shifts.find(s => s.name === worked.shift);
-                 if (shiftType.start < workedType.end && shiftType.end > workedType.start) {
-                     return Modal.show({ type: 'alert', message: `⚠️ 時間衝突\n\n${name} 已排「${worked.shift}」，時間重疊無法排「${shiftName}」！` });
-                }
-            }
-
-            await addDoc(getCollection('shifts'), { date: state.selectedDate, name, shift: shiftName, time: shiftType.time, code: shiftType.code });
+            if(!isAdmin())return;
+            const emp=state.employees.find(e=>e.id===getEl('day-add-emp').value),shiftName=getEl('day-add-shift').value,def=getShiftDef(shiftName);if(!emp||!def||!state.selectedDate)return;
+            let startTime=def.startTime||'',endTime=def.endTime||'',breakStart=def.breakStart||'',breakEnd=def.breakEnd||'',paidHours=def.paidHours||0;
+            if(def.flexible){startTime=getEl('flex-start').value;endTime=getEl('flex-end').value;breakStart=getEl('flex-break-start').value;breakEnd=getEl('flex-break-end').value;if(!startTime||!endTime)return Modal.show({type:'alert',message:'彈性班請輸入上班與下班時間'});if((breakStart&&!breakEnd)||(!breakStart&&breakEnd))return Modal.show({type:'alert',message:'休息時間請同時填寫開始與結束'});paidHours=calcPaidHours(startTime,endTime,breakStart,breakEnd);if(paidHours<=0)return Modal.show({type:'alert',message:'時間設定不正確，請確認下班時間晚於上班時間'});}
+            const leave=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===state.selectedDate&&(l.period==='all'||l.period===shiftName));if(leave)return Modal.show({type:'alert',message:`${emp.name} 當天已有「${leave.period==='all'?'全天':leave.period}」請假。`});
+            const candidate={shift:shiftName,startTime,endTime,breakStart,breakEnd,paidHours};const conflict=state.shifts.find(s=>s.date===state.selectedDate&&matchesEmployee(s,emp)&&overlaps(s,candidate));if(conflict)return Modal.show({type:'alert',message:`時間衝突：${emp.name} 已排 ${conflict.shift}（${shiftTimeText(conflict)}）。`});
+            const crossConflict=await findCrossStoreConflict(emp,state.selectedDate,candidate);
+            if(crossConflict)return Modal.show({type:'alert',message:`跨店時間衝突：${emp.name} 已在${STORE_CONFIG[crossConflict.storeId]?.name||'另一分店'}排 ${crossConflict.shift}（${shiftTimeText(crossConflict)}）。`});
+            await addDoc(getCollection('shifts'),{date:state.selectedDate,employeeId:emp.id,email:emp.email||'',name:emp.name,shift:shiftName,code:def.code,startTime,endTime,breakStart,breakEnd,paidHours,time:`${startTime}-${endTime}`,createdAt:Date.now()});
+            ['flex-start','flex-end','flex-break-start','flex-break-end'].forEach(id=>getEl(id).value='');
         };
-        
-        window.deleteShift = async (id) => { 
-            await deleteDoc(getDocRef('shifts', id));
+        window.deleteShift=id=>{if(isAdmin())deleteDoc(getDocRef('shifts',id));};
+
+        window.switchMainTab = view => {
+            if(!isAdmin()&&view!=='schedule')view='schedule';state.view=view;
+            ['home','report','schedule','staff','list'].forEach(v=>{const el=getEl('view-'+v),nav=getEl('nav-'+v);el?.classList.toggle('hidden',v!==view);if(nav){nav.classList.toggle('text-coffee-600',v===view);nav.classList.toggle('text-stone-400',v!==view);}});
+            rerenderCurrentView();applyRoleUI();
+        };
+        window.switchListTab=tab=>{state.listTab=tab;getEl('list-tx-container').classList.toggle('hidden',tab!=='tx');getEl('list-attn-container').classList.toggle('hidden',tab!=='attn');['tx','attn'].forEach(k=>{const b=getEl('ltab-'+k),active=k===tab;b.classList.toggle('border-coffee-600',active);b.classList.toggle('text-coffee-700',active);b.classList.toggle('border-transparent',!active);b.classList.toggle('text-stone-400',!active);});};
+
+        window.addTransaction=async()=>{if(!isAdmin())return;const amt=Number(getEl('amount-input').value);if(!amt)return Modal.show({type:'alert',message:'請輸入金額'});let name='',cat='',qty=0,unit='';if(state.type==='out'){cat=getEl('cat-select').value;if(cat==='stock'){name=getEl('item-select').value;qty=Number(getEl('qty-input').value)||0;unit=getEl('unit-input').value;}else if(cat==='rent')name='房租';else if(cat==='mgmt')name='管理費';else name=getEl('custom-note').value||'雜支';}else{cat='sales';name=getEl('income-note').value||'營收';}await addDoc(getCollection('transactions'),{date:`${state.currentMonth}-${String(new Date().getDate()).padStart(2,'0')}`,type:state.type,name,cat,amount:amt,qty,unit,createdAt:Date.now()});getEl('amount-input').value='';Modal.show({type:'alert',message:'已儲存',autoClose:700});};
+        window.safeAddFixedCost=()=>{if(!isAdmin())return;const cfg=currentStore();if(!cfg.rent&&!cfg.mgmt)return Modal.show({type:'alert',message:`${cfg.name}目前未設定固定房租與管理費。`});Modal.show({type:'confirm',title:'快速加入',message:`加入${cfg.name}房租與管理費？`,onConfirm:async()=>{const n=Date.now();if(cfg.rent)await addDoc(getCollection('transactions'),{date:state.currentMonth+'-05',type:'out',name:'房租',amount:cfg.rent,cat:'rent',createdAt:n});if(cfg.mgmt)await addDoc(getCollection('transactions'),{date:state.currentMonth+'-05',type:'out',name:'管理費',amount:cfg.mgmt,cat:'mgmt',createdAt:n+1});}});};
+        window.safeAddFixedIncome=()=>{if(!isAdmin())return;Modal.show({type:'prompt',title:`${currentStore().name}預估營收`,message:'金額：',defaultValue:currentStore().defaultIncome,onConfirm:async v=>{const n=Number(v);if(n)await addDoc(getCollection('transactions'),{date:state.currentMonth+'-01',type:'in',name:'預估營收',amount:n,cat:'sales',createdAt:Date.now()});}});};
+        window.safeDeleteTx=id=>{if(isAdmin())Modal.show({type:'confirm',title:'刪除',message:'確定刪除此紀錄？',onConfirm:()=>deleteDoc(getDocRef('transactions',id))});};
+        window.setType=t=>{state.type=t;const i=getEl('btn-in'),o=getEl('btn-out');getEl('income-options').classList.toggle('hidden',t!=='in');getEl('expense-options').classList.toggle('hidden',t==='in');i.className=t==='in'?'flex-1 py-2.5 rounded-lg text-sm font-bold bg-green-600 text-white shadow-sm':'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400';o.className=t==='out'?'flex-1 py-2.5 rounded-lg text-sm font-bold bg-red-400 text-white shadow-sm':'flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400';};
+        window.updateItemSelect=()=>{const cat=getEl('cat-select').value,is=getEl('item-select'),ci=getEl('custom-note'),ar=getEl('select-arrow'),sd=getEl('stock-details');is.innerHTML='';if(cat==='stock'){is.classList.remove('hidden');ar.classList.remove('hidden');ci.classList.add('hidden');sd.classList.remove('hidden');CONFIG.items.forEach(x=>{const o=document.createElement('option');o.value=x;o.textContent=x;is.appendChild(o);});}else{sd.classList.add('hidden');const fixed=['rent','mgmt'].includes(cat);is.classList.add('hidden');ar.classList.add('hidden');ci.classList.toggle('hidden',fixed);}};
+        window.switchReportTab=v=>{state.reportView=v;['chart','stock','attn'].forEach(k=>{getEl('report-'+k).classList.toggle('hidden',k!==v);const b=getEl('subtab-'+k);b.classList.toggle('text-coffee-700',k===v);b.classList.toggle('border-coffee-600',k===v);b.classList.toggle('text-stone-400',k!==v);b.classList.toggle('border-transparent',k!==v);});};
+        window.changeReportPeriod=p=>{state.reportPeriod=p;['month','quarter','half','year'].forEach(k=>{getEl('rp-'+k).className=k===p?'flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-coffee-700 shadow-sm transition-all':'flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all';});renderReport();};
+
+        function renderStaff(){const list=getEl('staff-list');if(!list)return;list.innerHTML='';getEl('staff-empty').classList.toggle('hidden',state.employees.length>0);state.employees.forEach(e=>{const my=state.shifts.filter(s=>matchesEmployee(s,e)&&s.date.startsWith(state.currentMonth));let normal=0,holiday=0;my.forEach(s=>{const h=getShiftMeta(s).paidHours;if(HOLIDAYS[s.date])holiday+=h;else normal+=h;});const total=normal+holiday,bonus=total>=160?2000:total>=120?1500:total>=80?1000:total>=40?500:0,wage=Number(e.wage)||210,salary=normal*wage+holiday*wage*2+bonus;const d=document.createElement('div');d.className='bg-white p-4 rounded-xl shadow-sm border border-stone-100';d.innerHTML=`<div class="flex justify-between items-start mb-3"><div class="flex items-center gap-2"><span class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style="background:${e.color||'#a67c52'}">${e.name[0]}</span><div><div class="font-bold text-coffee-800 text-lg">${e.name}<span class="text-[10px] ml-2 bg-coffee-50 text-coffee-600 px-1.5 py-0.5 rounded">${employeeStoreIds(e).map(id=>STORE_CONFIG[id]?.name||id).join('＋')}</span>${employeeStoreIds(e).length>1?'<span class="text-[10px] ml-1 bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">跨店支援</span>':''}</div><div class="text-xs text-stone-500">${e.email||'未綁定 Google'}｜時薪 $${wage}</div></div></div><div class="flex items-center gap-1">${e.role==='木白匠'?`<button onclick="toggleCrossStoreSupport('${e.id}')" class="text-[10px] font-bold px-2 py-1 rounded ${employeeStoreIds(e).length>1?'bg-amber-50 text-amber-700':'bg-coffee-50 text-coffee-700'}">${employeeStoreIds(e).length>1?'取消跨店':'開啟跨店'}</button>`:''}<button onclick="deleteStaff('${e.id}')" class="text-stone-300 p-1">✕</button></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2 text-xs mb-2"><div>一般 <b class="text-coffee-700">${normal}h</b></div><div>國定假日 <b class="text-red-500">${holiday}h</b></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2"><div><div class="text-[10px] text-stone-400">激勵獎金</div><b class="text-green-600">+$${bonus}</b></div><div><div class="text-[10px] text-stone-400">預估薪資</div><b>$${salary.toLocaleString()}</b></div></div>`;list.appendChild(d);});}
+
+        function renderSchedule(){const cal=getEl('schedule-calendar');if(!cal)return;cal.innerHTML='';const [y,m]=state.currentMonth.split('-').map(Number),first=new Date(y,m-1,1).getDay(),days=new Date(y,m,0).getDate();for(let i=0;i<first;i++)cal.appendChild(document.createElement('div'));for(let d=1;d<=days;d++){const date=`${state.currentMonth}-${String(d).padStart(2,'0')}`,cell=document.createElement('div');cell.className='calendar-cell';if(isAdmin())cell.onclick=()=>openDayModal(date);cell.innerHTML=`<span class="day-number">${d}${HOLIDAYS[date]?`<span class="holiday-tag">${HOLIDAYS[date]}</span>`:''}</span>`;const daily=state.shifts.filter(s=>s.date===date);currentStore().shifts.forEach(def=>{const rows=daily.filter(s=>s.shift===def.name);if(!rows.length)return;const names=rows.sort((a,b)=>(timeToMinutes(getShiftMeta(a).startTime)||0)-(timeToMinutes(getShiftMeta(b).startTime)||0)).map(s=>{const e=state.employees.find(x=>matchesEmployee(s,x))||{color:'#57534e'};const mine=state.employeeProfile&&s.employeeId===state.employeeProfile.employeeId;return `<span class="emp-name ${mine?'underline':''}" style="color:${e.color}">${s.name}</span>`;}).join(', ');const row=document.createElement('div');row.className='shift-row';row.title=rows.map(shiftTimeText).join('\n');row.innerHTML=`<span class="shift-label">${def.code}:</span>${names}`;cell.appendChild(row);});state.leaves.filter(l=>l.date===date).forEach(l=>{const row=document.createElement('div');row.className='shift-row';row.innerHTML=`<span class="shift-label text-stone-400">假:</span><span class="text-stone-400 text-[9px]">${l.name}</span>`;cell.appendChild(row);});cal.appendChild(cell);}const ll=getEl('leave-list');if(ll){ll.innerHTML='';const leaves=state.leaves.filter(l=>l.date.startsWith(state.currentMonth)).sort((a,b)=>a.date.localeCompare(b.date));getEl('leave-empty').classList.toggle('hidden',leaves.length>0);leaves.forEach(l=>{const d=document.createElement('div');d.className='flex justify-between text-sm bg-stone-50 p-2 rounded-lg';d.innerHTML=`<span><span class="font-mono text-coffee-600 mr-2">${l.date.slice(5)}</span>${l.name}（${l.type}-${l.period==='all'?'全天':l.period}）</span><button onclick="deleteLeave('${l.id}')" class="admin-only text-stone-300">✕</button>`;ll.appendChild(d);});}applyRoleUI();}
+
+        function renderList(){const c=getEl('attendance-list');if(!c)return;c.innerHTML='';const data=state.attendance.filter(a=>a.date.startsWith(state.currentMonth));getEl('attn-empty-msg').classList.toggle('hidden',data.length>0);data.forEach(a=>{const d=document.createElement('div');d.className='flex justify-between items-center p-3';d.innerHTML=`<div><span class="font-mono text-xs bg-stone-100 px-1 rounded">${a.date.slice(5)}</span><b class="ml-2">${a.name}</b></div><div class="text-xs text-stone-500">${a.time}<span class="text-green-600 bg-green-50 px-1 rounded ml-1">${a.status||'準時'}</span></div>`;c.appendChild(d);});}
+
+        function render(){const c=state.transactions.filter(t=>t.date?.startsWith(state.currentMonth));let inc=0,exp=0;c.forEach(t=>t.type==='in'?inc+=Number(t.amount)||0:exp+=Number(t.amount)||0);setText('disp-income',formatMoney(inc));setText('disp-expense',formatMoney(exp));const net=inc-exp,ne=getEl('disp-net');if(ne){ne.textContent=formatMoney(net);ne.className=`text-xl font-bold font-mono ${net>=0?'text-coffee-700':'text-red-500'}`;}const tb=getEl('transaction-list');if(tb){tb.innerHTML='';getEl('empty-msg').classList.toggle('hidden',c.length>0);c.forEach(t=>{let name=t.name;if(t.qty&&t.cat==='stock')name+=` <span class="text-[10px] bg-orange-100 px-1 rounded">${t.qty}${t.unit}</span>`;const d=document.createElement('div');d.className='flex justify-between items-center p-4';d.innerHTML=`<div><div class="text-xs text-stone-400">${t.date.slice(5)}</div><b class="text-sm">${name}</b></div><div class="flex items-center gap-2"><b class="${t.type==='in'?'text-green-600':'text-coffee-700'}">${formatMoney(t.amount)}</b><button onclick="safeDeleteTx('${t.id}')" class="text-stone-300">✕</button></div>`;tb.appendChild(d);});}}
+
+        function renderReport(){const range=getRange(state.reportPeriod,state.currentMonth),c=calcStats(state.transactions,range.start,range.end),p=calcStats(state.transactions,range.pStart,range.pEnd);setText('report-date-range',`${range.start} ~ ${range.end}`);const sc=(id,cv,pv)=>{setText(id+'-curr',formatMoney(cv));const diff=cv-pv,pct=pv?Math.round(diff/Math.abs(pv)*100):(cv?100:0);getEl(id+'-diff').innerHTML=`<span class="${diff>=0?'text-green-600':'text-red-500'} font-bold">${diff>=0?'▲':'▼'} ${Math.abs(pct)}%</span><span class="text-stone-400 ml-1">vs 上期 ${formatMoney(pv)}</span>`;};sc('comp-inc',c.inc,p.inc);sc('comp-net',c.net,p.net);const ct=getEl('pie-chart'),ld=getEl('pie-legend');ct.innerHTML='';ld.innerHTML='';const map={};c.txs.filter(t=>t.type==='out').forEach(t=>map[t.name]=(map[t.name]||0)+Number(t.amount||0));const data=Object.entries(map).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);if(!data.length)ct.innerHTML='<text x="50" y="50" text-anchor="middle" fill="#ccc" font-size="10" transform="rotate(90 50 50)">無資料</text>';else{const total=data.reduce((s,x)=>s+x.value,0);let angle=0;data.forEach((x,i)=>{const pc=x.value/total,deg=pc*360,color=CONFIG.colors[i%CONFIG.colors.length],x1=50+40*Math.cos(Math.PI*angle/180),y1=50+40*Math.sin(Math.PI*angle/180),x2=50+40*Math.cos(Math.PI*(angle+deg)/180),y2=50+40*Math.sin(Math.PI*(angle+deg)/180),path=data.length===1?'M 50 50 m -40 0 a 40 40 0 1 0 80 0 a 40 40 0 1 0 -80 0':`M 50 50 L ${x1} ${y1} A 40 40 0 ${deg>180?1:0} 1 ${x2} ${y2} Z`;const pth=document.createElementNS('http://www.w3.org/2000/svg','path');pth.setAttribute('d',path);pth.setAttribute('fill',color);pth.setAttribute('stroke','#fff');ct.appendChild(pth);angle+=deg;const item=document.createElement('div');item.innerHTML=`<span class="inline-block w-2.5 h-2.5 rounded-full mr-1" style="background:${color}"></span>${x.name} ${Math.round(pc*100)}%`;ld.appendChild(item);});}const sl=getEl('stock-list');sl.innerHTML='';const items=Object.keys(c.stock);getEl('stock-empty-msg').classList.toggle('hidden',items.length>0);items.forEach(n=>{const x=c.stock[n],prev=p.stock[n]||{qty:0},d=document.createElement('div');d.className='bg-white p-3 rounded-xl flex justify-between';d.innerHTML=`<b>${n}</b><div class="text-right"><b>${x.qty} ${x.unit||''}</b><div class="text-xs text-stone-400">上期 ${prev.qty}</div></div>`;sl.appendChild(d);});const al=getEl('attn-stats-list');al.innerHTML='';let any=false;state.employees.forEach(emp=>{const scheduled=state.shifts.filter(s=>matchesEmployee(s,emp)&&s.date.startsWith(state.currentMonth)).length,attended=state.attendance.filter(a=>matchesEmployee(a,emp)&&a.date.startsWith(state.currentMonth)).length;if(scheduled){any=true;const rate=Math.round(attended/scheduled*100),d=document.createElement('div');d.className='flex justify-between border-b pb-2 text-sm';d.innerHTML=`<b>${emp.name}</b><span>排班 ${scheduled}／打卡 ${attended}　<b>${rate}%</b></span>`;al.appendChild(d);}});getEl('attn-stats-empty').classList.toggle('hidden',any);}
+
+        window.migrateLegacyXinyiData = () => {
+            if(!isAdmin())return;
+            Modal.show({type:'confirm',title:'匯入舊資料',message:'把舊版根目錄資料複製到「信義店」嗎？可重複執行，不會因相同文件 ID 產生重複資料。',onConfirm:async()=>{
+                const cols=['transactions','employees','leaves','shifts','attendance','notices'];let count=0;
+                for(const colName of cols){const snap=await getDocs(collection(db,colName));for(const oldDoc of snap.docs){const data={...oldDoc.data(),storeId:'xinyi',primaryStoreId:'xinyi',storeIds:['xinyi'],crossStoreSupport:false};await setDoc(doc(db,'stores','xinyi',colName,oldDoc.id),data,{merge:true});count++;if(colName==='employees'&&data.email){const email=normalizeEmail(data.email);await setDoc(doc(db,'employeeDirectory',email),{employeeId:oldDoc.id,name:data.name,email,primaryStoreId:'xinyi',storeId:'xinyi',storeIds:['xinyi'],jobRole:data.role||'木白匠',role:'employee',crossStoreSupport:false,active:true,createdAt:Date.now()},{merge:true});}}}
+                Modal.show({type:'alert',message:`舊版信義店資料匯入完成，共處理 ${count} 筆。`});
+            }});
         };
 
-        window.switchMainTab = (view) => {
-            state.view = view;
-            ['home','report','schedule','staff','list'].forEach(v => {
-                const el=getEl('view-'+v), nav=getEl('nav-'+v);
-                if(v===view){ if(el) el.classList.remove('hidden'); if(nav) {nav.classList.add('text-coffee-600'); nav.classList.remove('text-stone-400');} }
-                else{ if(el) el.classList.add('hidden'); if(nav) {nav.classList.remove('text-coffee-600'); nav.classList.add('text-stone-400');} }
-            });
-            if(view==='report') renderReport(); if(view==='staff') renderStaff(); if(view==='schedule') renderSchedule(); if(view==='home' || view==='list') { render(); if(view==='list') renderList(); if(view==='home') renderNotices(); }
-        }
-        
-        window.switchListTab = (tab) => {
-            state.listTab = tab;
-            if(tab === 'tx') {
-                getEl('list-tx-container').classList.remove('hidden');
-                getEl('list-attn-container').classList.add('hidden');
-                getEl('ltab-tx').classList.add('border-coffee-600', 'text-coffee-700'); getEl('ltab-tx').classList.remove('border-transparent', 'text-stone-400');
-                getEl('ltab-attn').classList.remove('border-coffee-600', 'text-coffee-700'); getEl('ltab-attn').classList.add('border-transparent', 'text-stone-400');
-            } else {
-                getEl('list-tx-container').classList.add('hidden');
-                getEl('list-attn-container').classList.remove('hidden');
-                getEl('ltab-attn').classList.add('border-coffee-600', 'text-coffee-700'); getEl('ltab-attn').classList.remove('border-transparent', 'text-stone-400');
-                getEl('ltab-tx').classList.remove('border-coffee-600', 'text-coffee-700'); getEl('ltab-tx').classList.add('border-transparent', 'text-stone-400');
-            }
-        }
+        const Modal={show:opts=>{const el=getEl('app-modal'),t=getEl('modal-title'),m=getEl('modal-msg'),inp=getEl('modal-input-container'),i=getEl('modal-input'),c=getEl('modal-btn-cancel'),ok=getEl('modal-btn-confirm'),notice=getEl('modal-notice-inputs');t.textContent=opts.title||'提示';m.textContent=opts.message||'';inp.classList.toggle('hidden',opts.type!=='prompt');notice.classList.toggle('hidden',opts.type!=='notice');if(opts.type==='prompt'){i.value=opts.defaultValue||'';setTimeout(()=>i.focus(),100);}c.classList.remove('hidden');const nOk=ok.cloneNode(true),nC=c.cloneNode(true);ok.parentNode.replaceChild(nOk,ok);c.parentNode.replaceChild(nC,c);nC.onclick=()=>Modal.hide();if(opts.type==='alert'){nC.classList.add('hidden');nOk.onclick=()=>{Modal.hide();opts.onConfirm?.();};if(opts.autoClose)setTimeout(()=>Modal.hide(),opts.autoClose);}else if(['confirm','notice'].includes(opts.type))nOk.onclick=()=>{Modal.hide();opts.onConfirm?.(true);};else if(opts.type==='prompt')nOk.onclick=()=>{if(!i.value)return;Modal.hide();opts.onConfirm?.(i.value);};el.classList.remove('hidden');},hide:()=>getEl('app-modal').classList.add('hidden')};window.Modal=Modal;
 
-        // ... Transaction & Render Logic ...
-        window.addTransaction = async () => { if (!state.user) return; const amt = getEl('amount-input').value; if (!amt) return Modal.show({type:'alert',message:'請輸入金額'}); let name='', cat='', qty=0, unit=''; if (state.type === 'out') { cat = getEl('cat-select').value; if (cat === 'stock') { name = getEl('item-select').value; qty = Number(getEl('qty-input').value)||0; unit = getEl('unit-input').value; } else if(cat==='rent') name='房租'; else if(cat==='mgmt') name='管理費'; else name=getEl('custom-note').value||'雜支'; } else { cat = 'sales'; name = getEl('income-note').value || '營收'; } 
-        await addDoc(getCollection('transactions'), { date: state.currentMonth+'-'+new Date().getDate().toString().padStart(2,'0'), type: state.type, name, cat, amount: Number(amt), qty, unit, createdAt: Date.now() }); getEl('amount-input').value=''; Modal.show({type:'alert',message:'已儲存',autoClose:800}); };
-        
-        window.safeAddFixedCost = () => { if(!state.user)return; Modal.show({type:'confirm',title:'快速',message:'加入房租管理費?',onConfirm:async()=>{const r=getCollection('transactions'),n=Date.now();await addDoc(r,{date:state.currentMonth+'-05',type:'out',name:'房租',amount:CONFIG.rent,cat:'rent',createdAt:n});await addDoc(r,{date:state.currentMonth+'-05',type:'out',name:'管理費',amount:CONFIG.mgmt,cat:'mgmt',createdAt:n+1});Modal.show({type:'alert',message:'OK',autoClose:800});}}); };
-        window.safeAddFixedIncome = () => { if(!state.user)return; Modal.show({type:'prompt',title:'預估營收',message:'金額:',defaultValue:CONFIG.defaultIncome,onConfirm:async(v)=>{const n=Number(v);if(!n)return;await addDoc(getCollection('transactions'),{date:state.currentMonth+'-01',type:'in',name:'預估營收',amount:n,cat:'sales',createdAt:Date.now()});Modal.show({type:'alert',message:'OK',autoClose:800});}}); };
-        window.safeDeleteTx = (id) => { if(!state.user)return; Modal.show({type:'confirm',title:'刪除',message:'確定?',onConfirm:async()=>{await deleteDoc(getDocRef('transactions', id));}}); };
-        window.setType=t=>{state.type=t; const i=getEl('btn-in'),o=getEl('btn-out'),io=getEl('income-options'),eo=getEl('expense-options'); if(t==='in'){i.className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-green-600 text-white shadow-sm";o.className="flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400";io.classList.remove('hidden');eo.classList.add('hidden');}else{o.className="flex-1 py-2.5 rounded-lg text-sm font-bold bg-red-400 text-white shadow-sm";i.className="flex-1 py-2.5 rounded-lg text-sm font-bold text-gray-400";eo.classList.remove('hidden');io.classList.add('hidden');}};
-        window.updateItemSelect=()=>{const cat=getEl('cat-select').value,is=getEl('item-select'),ci=getEl('custom-note'),ar=getEl('select-arrow'),sd=getEl('stock-details'); is.innerHTML=''; if(cat==='stock'){is.classList.remove('hidden');ar.classList.remove('hidden');ci.classList.add('hidden');sd.classList.remove('hidden');CONFIG.items.forEach(i=>{const o=document.createElement('option');o.value=i;o.textContent=i;is.appendChild(o);});}else{sd.classList.add('hidden');if(['rent','mgmt'].includes(cat)){is.classList.add('hidden');ar.classList.add('hidden');ci.classList.add('hidden');}else{is.classList.add('hidden');ar.classList.add('hidden');ci.classList.remove('hidden');}}};
-        window.switchReportTab = (v) => { state.reportView = v; const c=getEl('report-chart'), s=getEl('report-stock'), a=getEl('report-attn'), bc=getEl('subtab-chart'), bs=getEl('subtab-stock'), ba=getEl('subtab-attn'); if(v==='chart'){c.classList.remove('hidden');s.classList.add('hidden');a.classList.add('hidden');bc.className="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600";bs.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";ba.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";}else if(v==='stock'){s.classList.remove('hidden');c.classList.add('hidden');a.classList.add('hidden');bs.className="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600";bc.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";ba.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";}else{a.classList.remove('hidden');c.classList.add('hidden');s.classList.add('hidden');ba.className="flex-1 py-2 text-sm font-bold text-coffee-700 border-b-2 border-coffee-600";bc.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";bs.className="flex-1 py-2 text-sm font-bold text-stone-400 border-b-2 border-transparent";} };
-        window.changeReportPeriod = (p) => { state.reportPeriod = p; ['month','quarter','half','year'].forEach(k => { getEl('rp-'+k).className = k===p ? "flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-coffee-700 shadow-sm transition-all" : "flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all"; }); renderReport(); }
-
-        function renderStaff() {
-            const list = getEl('staff-list'); if(!list) return; list.innerHTML = '';
-            if(state.employees.length === 0) return getEl('staff-empty').classList.remove('hidden');
-            getEl('staff-empty').classList.add('hidden');
-            state.employees.forEach(e => {
-                const myShifts = state.shifts.filter(s => s.name === e.name && s.date.startsWith(state.currentMonth));
-                let totalHours = 0, holidayHours = 0;
-                myShifts.forEach(s => { if (HOLIDAYS[s.date]) holidayHours += 4; else totalHours += 4; });
-                let bonus = 0; const totalWork = totalHours + holidayHours;
-                if (totalWork >= 160) bonus = 2000; else if (totalWork >= 120) bonus = 1500; else if (totalWork >= 80) bonus = 1000; else if (totalWork >= 40) bonus = 500;
-                const baseWage = e.wage || 183; const salary = (totalHours * baseWage) + (holidayHours * baseWage * 2); const totalPay = salary + bonus;
-                const div = document.createElement('div'); div.className = "bg-white p-4 rounded-xl shadow-sm border border-stone-100";
-                div.innerHTML = `<div class="flex justify-between items-start mb-3"><div class="flex items-center gap-2"><span class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style="background-color: ${e.color || '#a67c52'}">${e.name[0]}</span><div><div class="font-bold text-coffee-800 text-lg flex items-center gap-1">${e.name}<span class="role-tag bg-stone-100 text-stone-500">${e.role==='木白匠'?'匠':'糖'}</span><span class="text-[9px] text-gray-300 ml-1 font-normal">${e.email?'🔗':''}</span></div><div class="text-xs text-stone-500">時薪 $${baseWage}</div></div></div><button onclick="deleteStaff('${e.id}')" class="text-stone-300 hover:text-red-500 text-sm">✕</button></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2 text-xs mb-2"><div class="text-stone-500">一般時數: <span class="font-bold text-coffee-700">${totalHours}h</span></div><div class="text-stone-500">國定假日: <span class="font-bold text-red-500">${holidayHours}h</span></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2"><div><div class="text-[10px] text-stone-400">激勵獎金</div><div class="font-bold text-green-600">+$${bonus}</div></div><div><div class="text-[10px] text-stone-400">預估薪資</div><div class="font-bold text-coffee-900">$${totalPay.toLocaleString()}</div></div></div>`;
-                list.appendChild(div);
-            });
-        }
-
-        function renderSchedule() {
-            const cal = getEl('schedule-calendar'); if(!cal) return; cal.innerHTML = '';
-            const [year, month] = state.currentMonth.split('-'); const firstDay = new Date(year, month-1, 1).getDay(); const daysInMonth = new Date(year, month, 0).getDate();
-            for(let i=0; i<firstDay; i++) cal.appendChild(document.createElement('div'));
-            
-            for(let d=1; d<=daysInMonth; d++) {
-                const dateStr = `${state.currentMonth}-${String(d).padStart(2,'0')}`;
-                const cell = document.createElement('div'); cell.className = "calendar-cell"; cell.onclick = () => openDayModal(dateStr);
-                const holidayName = HOLIDAYS[dateStr] ? `<span class="holiday-tag">${HOLIDAYS[dateStr]}</span>` : '';
-                cell.innerHTML = `<span class="day-number">${d}${holidayName}</span>`;
-                
-                // --- Shift Grouping Display ---
-                const dailyShifts = state.shifts.filter(s => s.date === dateStr);
-                const groups = { '早班': [], '白班': [], '晚班': [] };
-                dailyShifts.forEach(s => { if(groups[s.shift]) groups[s.shift].push(s.name); });
-
-                ['早班', '白班', '晚班'].forEach(shiftName => {
-                    const names = groups[shiftName];
-                    if (names.length > 0) {
-                        const shiftConf = CONFIG.shifts.find(s => s.name === shiftName);
-                        // Sort names inside the shift line alphabetically
-                        names.sort();
-                        
-                        // Generate Colored Names
-                        const coloredNames = names.map(n => {
-                            const emp = state.employees.find(e => e.name === n) || {color: '#57534e'};
-                            return `<span class="emp-name" style="color: ${emp.color}">${n}</span>`;
-                        }).join(', ');
-
-                        const row = document.createElement('div');
-                        row.className = "shift-row";
-                        row.innerHTML = `<span class="shift-label">${shiftConf.code}:</span> ${coloredNames}`;
-                        cell.appendChild(row);
-                    }
-                });
-
-                // Leave Dots
-                state.leaves.filter(l => l.date === dateStr).forEach(l => {
-                    const row = document.createElement('div');
-                    row.className = "shift-row";
-                    row.style.background = '#f5f5f4'; // Gray bg for leave
-                    row.innerHTML = `<span class="shift-label text-stone-400">假:</span> <span class="text-stone-400 text-[9px]">${l.name}</span>`;
-                    cell.appendChild(row);
-                });
-
-                cal.appendChild(cell);
-            }
-            const lList = getEl('leave-list'); if(lList){ lList.innerHTML = ''; const mLeaves = state.leaves.filter(l => l.date.startsWith(state.currentMonth)).sort((a,b)=>a.date.localeCompare(b.date)); if(mLeaves.length === 0) getEl('leave-empty').classList.remove('hidden'); else { getEl('leave-empty').classList.add('hidden'); mLeaves.forEach(l => { const div = document.createElement('div'); div.className = "flex justify-between text-sm bg-stone-50 p-2 rounded-lg border border-stone-100"; div.innerHTML = `<span><span class="font-mono text-coffee-600 mr-2">${l.date.slice(5)}</span>${l.name} (${l.type}-${l.period==='all'?'全天':l.period})</span><button onclick="deleteLeave('${l.id}')" class="text-stone-300">✕</button>`; lList.appendChild(div); }); } }
-        }
-
-        function renderList() {
-            const container = getEl('attendance-list'); if(!container) return; container.innerHTML = '';
-            const attns = state.attendance.filter(a => a.date.startsWith(state.currentMonth));
-            if(attns.length === 0) getEl('attn-empty-msg').classList.remove('hidden');
-            else {
-                getEl('attn-empty-msg').classList.add('hidden');
-                attns.forEach(a => {
-                    const div = document.createElement('div'); div.className = "flex justify-between items-center p-3 hover:bg-stone-50 transition-colors";
-                    div.innerHTML = `<div class="flex gap-2 items-center"><span class="font-mono text-xs bg-stone-100 px-1 rounded">${a.date.slice(5)}</span><span class="font-bold text-coffee-800">${a.name}</span></div><div class="text-xs text-stone-500 flex items-center gap-1"><span>${a.time}</span><span class="text-green-600 bg-green-50 px-1 rounded">準時</span></div>`;
-                    container.appendChild(div);
-                });
-            }
-        }
-
-        function render(){
-            const dispInc = getEl('disp-income'); if(!dispInc) return;
-            const c=state.transactions.filter(t=>t.date.startsWith(state.currentMonth));
-            let i=0,e=0; c.forEach(t=>{if(t.type==='in')i+=t.amount;else e+=t.amount});
-            const n=i-e; setText('disp-income', formatMoney(i)); setText('disp-expense', formatMoney(e));
-            const ne=getEl('disp-net'); if(ne){ ne.textContent=formatMoney(n); ne.className=`text-xl font-bold font-mono ${n>=0?'text-coffee-700':'text-red-500'}`; }
-            let tn=0; state.transactions.forEach(t=>{if(t.type==='in')tn+=t.amount;else tn-=t.amount});
-            const rm=CONFIG.fixedCost-tn; setText('disp-remaining', formatMoney(Math.max(0,rm)));
-            const pb = getEl('progress-bar'); if(pb) pb.style.width=`${Math.min(100,Math.max(0,(tn/CONFIG.fixedCost)*100))}%`;
-            const tb=getEl('transaction-list'); 
-            if(tb) {
-                tb.innerHTML='';
-                if(c.length===0 && getEl('empty-msg')) getEl('empty-msg').classList.remove('hidden');
-                else {
-                    if(getEl('empty-msg')) getEl('empty-msg').classList.add('hidden');
-                    c.forEach(t=>{
-                        let nd=t.name; if(t.qty&&t.cat==='stock')nd+=` <span class="text-[10px] bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded-full ml-1">${t.qty}${t.unit}</span>`;
-                        const d=document.createElement('div');d.className="flex justify-between items-center p-4 hover:bg-stone-50 active:bg-stone-100 transition-colors";
-                        d.innerHTML=`<div class="flex flex-col gap-1"><span class="text-xs text-stone-400 font-mono">${t.date.slice(5)}</span><span class="text-sm font-bold text-coffee-900 flex items-center"><span class="w-1.5 h-1.5 rounded-full mr-2 ${t.type==='in'?'bg-green-500':'bg-red-400'}"></span>${nd}</span></div><div class="flex items-center gap-3"><span class="font-bold font-mono text-base ${t.type==='in'?'text-green-600':'text-coffee-700'}">${formatMoney(t.amount)}</span><button onclick="safeDeleteTx('${t.id}')" class="text-stone-300 hover:text-red-500 p-2 -mr-2"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button></div>`;
-                        tb.appendChild(d);
-                    });
-                }
-            }
-        }
-
-        function renderReport(){
-            const rangeEl = getEl('report-date-range'); if(!rangeEl) return;
-            const r=getRange(state.reportPeriod,state.currentMonth),c=calcStats(state.transactions,r.start,r.end),p=calcStats(state.transactions,r.pStart,r.pEnd);
-            rangeEl.textContent=`${r.start} ~ ${r.end}`;
-            const sc=(id,cv,pv)=>{const el=getEl(id+'-curr'); if(!el)return; el.textContent=formatMoney(cv);const d=cv-pv,pct=pv!==0?Math.round((d/Math.abs(pv))*100):(cv>0?100:0),cl=d>=0?'text-green-600':'text-red-500',ar=d>=0?'▲':'▼';getEl(id+'-diff').innerHTML=`<span class="${cl} font-bold">${ar} ${Math.abs(pct)}%</span> <span class="text-stone-400 ml-1">vs 上期 ${formatMoney(pv)}</span>`;};
-            sc('comp-inc',c.inc,p.inc); sc('comp-net',c.net,p.net);
-            const ct=getEl('pie-chart'),ld=getEl('pie-legend'); 
-            if(ct && ld) {
-                ct.innerHTML=''; ld.innerHTML=''; let mp={}; c.txs.filter(t=>t.type==='out').forEach(t=>{mp[t.name]=(mp[t.name]||0)+t.amount;}); let cd=Object.keys(mp).map(k=>({name:k,value:mp[k]})).sort((a,b)=>b.value-a.value);
-                if(cd.length===0)ct.innerHTML='<text x="50" y="50" text-anchor="middle" fill="#ccc" font-size="10" transform="rotate(90 50 50)">無資料</text>';
-                else{ const tl=cd.reduce((s,i)=>s+i.value,0);let ac=0; cd.forEach((i,x)=>{const pc=i.value/tl,dg=pc*360,cl=CONFIG.colors[x%CONFIG.colors.length],x1=50+40*Math.cos(Math.PI*ac/180),y1=50+40*Math.sin(Math.PI*ac/180),x2=50+40*Math.cos(Math.PI*(ac+dg)/180),y2=50+40*Math.sin(Math.PI*(ac+dg)/180),d=cd.length===1?`M 50 50 m -40 0 a 40 40 0 1 0 80 0 a 40 40 0 1 0 -80 0`:`M 50 50 L ${x1} ${y1} A 40 40 0 ${dg>180?1:0} 1 ${x2} ${y2} Z`;const pt=document.createElementNS("http://www.w3.org/2000/svg","path");pt.setAttribute("d",d);pt.setAttribute("fill",cl);pt.setAttribute("stroke","#fff");ct.appendChild(pt);ac+=dg;const li=document.createElement('div');li.className="flex items-center gap-1.5";li.innerHTML=`<span class="w-2.5 h-2.5 rounded-full" style="background:${cl}"></span><span class="truncate text-coffee-800 flex-1">${i.name}</span><span class="text-stone-400">${Math.round(pc*100)}%</span>`;ld.appendChild(li);}); }
-            }
-            const sl=getEl('stock-list'); 
-            if(sl) {
-                sl.innerHTML=''; const it=Object.keys(c.stock);
-                if(it.length===0 && getEl('stock-empty-msg')) getEl('stock-empty-msg').classList.remove('hidden');
-                else { if(getEl('stock-empty-msg')) getEl('stock-empty-msg').classList.add('hidden'); it.forEach(n=>{const ci=c.stock[n],pi=p.stock[n]||{qty:0},dq=ci.qty-pi.qty,dc=dq>0?'text-red-400':(dq<0?'text-green-500':'text-stone-400'),di=dq>0?'↑':(dq<0?'↓':'-');const dv=document.createElement('div');dv.className="bg-white p-3 rounded-xl shadow-sm border border-stone-100 flex justify-between items-center";dv.innerHTML=`<div class="font-bold text-coffee-800">${n}</div><div class="text-right"><div class="text-lg font-bold font-mono text-coffee-600">${ci.qty} <span class="text-xs text-stone-400">${ci.unit||''}</span></div><div class="text-xs ${dc} font-bold bg-stone-50 px-1.5 py-0.5 rounded inline-block">上期: ${pi.qty} (${di} ${Math.abs(dq)})</div></div>`;sl.appendChild(dv);}); }
-            }
-
-            // Attendance Report
-            const al = getEl('attn-stats-list');
-            if(al) {
-                al.innerHTML = '';
-                if(state.shifts.length === 0) getEl('attn-stats-empty').classList.remove('hidden');
-                else {
-                    getEl('attn-stats-empty').classList.add('hidden');
-                    state.employees.forEach(emp => {
-                        const scheduled = state.shifts.filter(s => s.name === emp.name && s.date.startsWith(state.currentMonth)).length;
-                        const attended = state.attendance.filter(a => a.name === emp.name && a.date.startsWith(state.currentMonth)).length;
-                        if(scheduled > 0) {
-                            const rate = Math.round((attended / scheduled) * 100);
-                            const color = rate >= 90 ? 'text-green-600' : (rate >= 70 ? 'text-yellow-600' : 'text-red-500');
-                            const div = document.createElement('div');
-                            div.className = "flex justify-between items-center text-sm border-b border-stone-50 pb-2";
-                            div.innerHTML = `<span class="font-bold text-coffee-800">${emp.name}</span><div class="flex gap-3"><span class="text-stone-400 text-xs">排班:${scheduled} / 打卡:${attended}</span><span class="${color} font-bold">${rate}%</span></div>`;
-                            al.appendChild(div);
-                        }
-                    });
-                }
-            }
-        }
-
-        const Modal = { show: (opts) => { const el = getEl('app-modal'), t=getEl('modal-title'), m=getEl('modal-msg'), inp=getEl('modal-input-container'), i=getEl('modal-input'), c=getEl('modal-btn-cancel'), ok=getEl('modal-btn-confirm'), n=getEl('modal-notice-inputs'); 
-            t.textContent=opts.title||'提示'; m.textContent=opts.message||''; 
-            
-            // Logic for Notice Type
-            if(opts.type === 'notice') {
-                inp.classList.add('hidden');
-                n.classList.remove('hidden');
-            } else if(opts.type === 'prompt') {
-                inp.classList.remove('hidden'); 
-                n.classList.add('hidden');
-                i.value=opts.defaultValue||''; 
-                setTimeout(()=>i.focus(),100); 
-            } else {
-                inp.classList.add('hidden'); 
-                n.classList.add('hidden');
-            }
-            
-            c.classList.remove('hidden'); 
-            const nOk=ok.cloneNode(true), nC=c.cloneNode(true); ok.parentNode.replaceChild(nOk, ok); c.parentNode.replaceChild(nC, c); 
-            nC.onclick=()=>Modal.hide(); 
-            
-            if(opts.type==='alert'){ nC.classList.add('hidden'); nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm();}; if(opts.autoClose) setTimeout(()=>Modal.hide(), opts.autoClose); } 
-            else if(opts.type==='confirm' || opts.type==='notice'){ nOk.onclick=()=>{Modal.hide();if(opts.onConfirm)opts.onConfirm(true);}; } 
-            else if(opts.type==='prompt'){ nOk.onclick=()=>{const v=i.value; if(!v)return; Modal.hide(); if(opts.onConfirm)opts.onConfirm(v);}; } 
-            
-            el.classList.remove('hidden'); 
-        }, hide:()=>{getEl('app-modal').classList.add('hidden');}};
-        window.Modal = Modal;
-        
         getEl('month-select').value=state.currentMonth;
-        getEl('month-select').addEventListener('change',(e)=>{state.currentMonth=e.target.value;render();if(state.view==='report')renderReport();if(state.view==='schedule')renderSchedule();});
+        window.updateSupportEligibility();
+        getEl('month-select').addEventListener('change',e=>{state.currentMonth=e.target.value;rerenderCurrentView();});
         getEl('btn-save').addEventListener('click',window.addTransaction);
         getEl('btn-fixed-cost').addEventListener('click',window.safeAddFixedCost);
         getEl('btn-fixed-income').addEventListener('click',window.safeAddFixedIncome);
