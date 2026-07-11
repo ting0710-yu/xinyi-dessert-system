@@ -54,38 +54,19 @@
 </head>
 <body class="bg-[#f8f6f4] text-coffee-900 h-[100dvh] overflow-hidden flex flex-col">
 
-    <!-- Google 登入／權限確認 -->
-    <div id="auth-screen" class="fixed inset-0 z-[120] bg-[#f8f6f4] flex items-center justify-center p-6">
-        <div class="bg-white rounded-3xl shadow-xl border border-stone-100 p-7 w-full max-w-sm text-center">
-            <div class="w-16 h-16 rounded-full bg-coffee-100 text-coffee-700 flex items-center justify-center mx-auto mb-4 text-2xl">煦</div>
-            <h2 class="text-xl font-bold text-coffee-800 mb-2">煦煦木白管理端</h2>
-            <p id="auth-message" class="text-sm text-stone-500 leading-relaxed mb-5">管理端正在安全連線，不需要 Google 登入。</p>
-            <button id="google-login-btn" onclick="googleLogin()" disabled class="hidden w-full bg-white border border-stone-300 py-3 rounded-xl font-bold text-stone-700 shadow-sm active:bg-stone-50 flex items-center justify-center gap-2 opacity-60 cursor-not-allowed disabled:active:bg-white">
-                <span class="text-lg">G</span> <span id="google-login-label">登入服務載入中…</span>
-            </button>
-            <button id="open-browser-btn" onclick="openInBrowser()" class="hidden mt-3 w-full bg-coffee-50 border border-coffee-200 text-coffee-700 py-3 rounded-xl font-bold">在瀏覽器新分頁開啟</button>
-            <button id="claim-owner-btn" onclick="claimFirstOwner()" class="hidden w-full bg-coffee-600 text-white py-3 rounded-xl font-bold shadow-md active:bg-coffee-800">設為第一位管理員</button>
-            <button id="auth-logout-btn" onclick="logoutApp()" class="hidden mt-3 w-full text-xs text-stone-400 py-2">改用其他 Google 帳號</button>
-            <p id="auth-detail" class="text-[11px] text-stone-400 mt-4 leading-relaxed"></p>
-        </div>
-    </div>
-
-    <div id="loading-overlay">
-        <div class="spinner"></div>
-        <div class="text-coffee-800 font-bold text-sm tracking-wide">系統連線中...</div>
-    </div>
+    <!-- 管理端直接顯示主介面；Firebase 在背景完成匿名連線。 -->
 
     <header class="bg-coffee-700 text-white pt-safe-top pb-3 px-4 shadow-md z-20 shrink-0">
         <div class="pt-2 space-y-2">
             <div class="flex justify-between items-center gap-3">
                 <div class="min-w-0">
                     <h1 id="app-title" class="text-lg font-bold truncate">煦煦木白分店管理</h1>
-                    <div id="user-summary" class="text-[10px] text-coffee-100 truncate"></div>
+                    <div id="user-summary" class="text-[10px] text-coffee-100 truncate">管理端｜連線中…</div>
                 </div>
                 <button onclick="logoutApp()" class="hidden shrink-0 text-xs bg-coffee-800 border border-coffee-600 rounded-lg px-2.5 py-1.5">登出</button>
             </div>
             <div class="flex gap-2 items-center">
-                <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"></select>
+                <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"><option value="xinyi">信義店</option><option value="ntu">台大店</option></select>
                 <div id="store-badge" class="hidden flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-3 py-1.5 font-bold"></div>
                 <input type="month" id="month-select" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-orange-300">
             </div>
@@ -502,7 +483,7 @@
         };
 
         let state = {
-            user:null, accessRole:null, employeeProfile:null, storeId:null, accessibleStoreIds:[], unsubs:[],
+            user:null, accessRole:'admin', employeeProfile:null, storeId:'xinyi', accessibleStoreIds:['xinyi','ntu'], unsubs:[],
             transactions:[], employees:[], leaves:[], shifts:[], attendance:[], notices:[],
             currentMonth:new Date().toISOString().slice(0,7), type:'out', view:'home', reportView:'chart', reportPeriod:'month',
             selectedDate:null, leaveMode:'single', listTab:'tx'
@@ -561,11 +542,15 @@
         }
 
         function showAuth(mode, message, detail='') {
-            const screen=getEl('auth-screen');
-            screen.classList.remove('hidden');
-            setText('auth-message',message);
-            setText('auth-detail',detail);
-            ['google-login-btn','claim-owner-btn','auth-logout-btn','open-browser-btn'].forEach(id=>getEl(id)?.classList.add('hidden'));
+            // 不再顯示前置頁，主介面會直接開啟。
+            setText('user-summary', mode === 'loading' ? '管理端｜連線中…' : `管理端｜${message}`);
+            if (mode === 'error' || mode === 'denied') {
+                setTimeout(() => window.Modal?.show({
+                    type:'alert',
+                    title:message,
+                    message:detail || '系統目前無法完成連線。'
+                }), 0);
+            }
         }
 
         window.openInBrowser = () => {
@@ -608,20 +593,15 @@
             }
         };
 
-        // 管理端不顯示 Google 登入。Firebase 只在背景建立匿名裝置身分，
-        // 用來保護 Firestore，不會要求店主選擇帳號。
+        // 管理端打開後直接進入介面，不綁定特定瀏覽器或裝置。
+        // Firebase 僅在背景使用匿名身分連接 Firestore，不顯示登入畫面。
         setGoogleLoginReady(false,'管理端免登入');
-        window.logoutApp = () => Modal.show({
-            type:'alert',
-            title:'管理端已綁定此瀏覽器',
-            message:'管理端不需要登出。請勿清除這個網站的瀏覽資料，否則此裝置識別碼會改變。'
-        });
+        window.logoutApp = () => {};
         window.claimFirstOwner = async () => {};
 
         onAuthStateChanged(auth, async user => {
             state.user=user;
             if(!user) {
-                showAuth('loading','管理端正在安全連線…','不需要 Google 登入，系統會在背景綁定這個瀏覽器。');
                 try {
                     await signInAnonymously(auth);
                 } catch(err) {
@@ -629,52 +609,25 @@
                 }
                 return;
             }
-            await resolveAccess(user);
-        });
 
-        async function resolveAccess(user) {
-            const appRef=doc(db,'settings','app');
-            let appSnap=await getDoc(appRef);
-
-            if(!appSnap.exists()) {
+            // 避免舊版本留下 Google 登入狀態；管理端統一使用匿名身分。
+            if(!user.isAnonymous) {
                 try {
-                    await runTransaction(db, async tx => {
-                        const snap=await tx.get(appRef);
-                        if(!snap.exists()) {
-                            tx.set(appRef,{
-                                ownerUid:user.uid,
-                                adminUids:[user.uid],
-                                ownerType:'local-device',
-                                createdAt:Date.now()
-                            });
-                        }
-                    });
-                    appSnap=await getDoc(appRef);
+                    await signOut(auth);
+                    await signInAnonymously(auth);
                 } catch(err) {
-                    showAuth('error','無法建立管理裝置',`${err.code||''} ${err.message||''}`.trim());
-                    return;
+                    showAuth('error','管理端無法切換為免登入模式',`${err.code||''} ${err.message||''}`.trim());
                 }
-            }
-
-            const appData=appSnap.data()||{};
-            const admins=Array.isArray(appData.adminUids)?appData.adminUids:[];
-            if(appData.ownerUid===user.uid || admins.includes(user.uid)) {
-                await startSession('admin','xinyi',null);
                 return;
             }
 
-            showAuth(
-                'denied',
-                '這個瀏覽器尚未被授權為管理裝置。',
-                `管理端已綁定其他瀏覽器。請使用第一次開啟管理頁的原裝置。\n\n若需要更換裝置，請到 Firestore 的 settings/app，把 ownerUid 改成：\n${user.uid}`
-            );
-        }
+            await startSession('admin','xinyi',null);
+        });
 
         async function startSession(role, storeId, profile) {
             state.accessRole=role; state.employeeProfile=profile;
             state.accessibleStoreIds=isAdmin()?Object.keys(STORE_CONFIG):profileStoreIds(profile);
             if(!state.accessibleStoreIds.length)state.accessibleStoreIds=[storeId||'xinyi'];
-            getEl('auth-screen').classList.add('hidden');
             populateStoreSelectors();
             applyRoleUI();
             await changeStoreInternal(storeId||state.accessibleStoreIds[0]);
@@ -689,7 +642,7 @@
             getEl('store-select').classList.toggle('hidden',!canSwitch);
             getEl('store-badge').classList.toggle('hidden',canSwitch);
             const job=state.employeeProfile?.jobRole||'';
-            setText('user-summary',isAdmin()?'管理端｜此瀏覽器':`${state.user?.email||''}｜${job||'員工'}`);
+            setText('user-summary',isAdmin()?'管理端':`${state.user?.email||''}｜${job||'員工'}`);
         }
 
         function populateStoreSelectors() {
@@ -752,8 +705,7 @@
         }
 
         function checkLoad() {
-            const overlay=getEl('loading-overlay');
-            if(overlay){overlay.classList.add('opacity-0');setTimeout(()=>overlay.remove(),250);}
+            // 主介面從一開始就顯示，無需移除全螢幕載入畫面。
         }
 
         function renderShiftLegend() {
@@ -1081,6 +1033,10 @@
 
         const Modal={show:opts=>{const el=getEl('app-modal'),t=getEl('modal-title'),m=getEl('modal-msg'),inp=getEl('modal-input-container'),i=getEl('modal-input'),c=getEl('modal-btn-cancel'),ok=getEl('modal-btn-confirm'),notice=getEl('modal-notice-inputs');t.textContent=opts.title||'提示';m.textContent=opts.message||'';inp.classList.toggle('hidden',opts.type!=='prompt');notice.classList.toggle('hidden',opts.type!=='notice');if(opts.type==='prompt'){i.value=opts.defaultValue||'';setTimeout(()=>i.focus(),100);}c.classList.remove('hidden');const nOk=ok.cloneNode(true),nC=c.cloneNode(true);ok.parentNode.replaceChild(nOk,ok);c.parentNode.replaceChild(nC,c);nC.onclick=()=>Modal.hide();if(opts.type==='alert'){nC.classList.add('hidden');nOk.onclick=()=>{Modal.hide();opts.onConfirm?.();};if(opts.autoClose)setTimeout(()=>Modal.hide(),opts.autoClose);}else if(['confirm','notice'].includes(opts.type))nOk.onclick=()=>{Modal.hide();opts.onConfirm?.(true);};else if(opts.type==='prompt')nOk.onclick=()=>{if(!i.value)return;Modal.hide();opts.onConfirm?.(i.value);};el.classList.remove('hidden');},hide:()=>getEl('app-modal').classList.add('hidden')};window.Modal=Modal;
 
+        populateStoreSelectors();
+        applyRoleUI();
+        renderShiftLegend();
+        populateShiftOptions();
         getEl('month-select').value=state.currentMonth;
         window.updateSupportEligibility();
         getEl('month-select').addEventListener('change',e=>{state.currentMonth=e.target.value;rerenderCurrentView();});
