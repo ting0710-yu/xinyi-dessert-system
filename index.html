@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#6f4e37">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <title>煦煦木白｜多分店排班（跨店支援修正版）</title>
+    <title>煦煦木白｜多分店排班（Google 白頁修正版）</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -58,11 +58,12 @@
     <div id="auth-screen" class="fixed inset-0 z-[120] bg-[#f8f6f4] flex items-center justify-center p-6">
         <div class="bg-white rounded-3xl shadow-xl border border-stone-100 p-7 w-full max-w-sm text-center">
             <div class="w-16 h-16 rounded-full bg-coffee-100 text-coffee-700 flex items-center justify-center mx-auto mb-4 text-2xl">煦</div>
-            <h2 class="text-xl font-bold text-coffee-800 mb-2">煦煦木白分店系統</h2>
-            <p id="auth-message" class="text-sm text-stone-500 leading-relaxed mb-5">請使用已登記的 Google 帳號登入。</p>
-            <button id="google-login-btn" onclick="googleLogin()" class="w-full bg-white border border-stone-300 py-3 rounded-xl font-bold text-stone-700 shadow-sm active:bg-stone-50 flex items-center justify-center gap-2">
-                <span class="text-lg">G</span> 使用 Google 登入
+            <h2 class="text-xl font-bold text-coffee-800 mb-2">煦煦木白管理端</h2>
+            <p id="auth-message" class="text-sm text-stone-500 leading-relaxed mb-5">管理端正在安全連線，不需要 Google 登入。</p>
+            <button id="google-login-btn" onclick="googleLogin()" disabled class="hidden w-full bg-white border border-stone-300 py-3 rounded-xl font-bold text-stone-700 shadow-sm active:bg-stone-50 flex items-center justify-center gap-2 opacity-60 cursor-not-allowed disabled:active:bg-white">
+                <span class="text-lg">G</span> <span id="google-login-label">登入服務載入中…</span>
             </button>
+            <button id="open-browser-btn" onclick="openInBrowser()" class="hidden mt-3 w-full bg-coffee-50 border border-coffee-200 text-coffee-700 py-3 rounded-xl font-bold">在瀏覽器新分頁開啟</button>
             <button id="claim-owner-btn" onclick="claimFirstOwner()" class="hidden w-full bg-coffee-600 text-white py-3 rounded-xl font-bold shadow-md active:bg-coffee-800">設為第一位管理員</button>
             <button id="auth-logout-btn" onclick="logoutApp()" class="hidden mt-3 w-full text-xs text-stone-400 py-2">改用其他 Google 帳號</button>
             <p id="auth-detail" class="text-[11px] text-stone-400 mt-4 leading-relaxed"></p>
@@ -81,7 +82,7 @@
                     <h1 id="app-title" class="text-lg font-bold truncate">煦煦木白分店管理</h1>
                     <div id="user-summary" class="text-[10px] text-coffee-100 truncate"></div>
                 </div>
-                <button onclick="logoutApp()" class="shrink-0 text-xs bg-coffee-800 border border-coffee-600 rounded-lg px-2.5 py-1.5">登出</button>
+                <button onclick="logoutApp()" class="hidden shrink-0 text-xs bg-coffee-800 border border-coffee-600 rounded-lg px-2.5 py-1.5">登出</button>
             </div>
             <div class="flex gap-2 items-center">
                 <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"></select>
@@ -445,7 +446,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import {
-            getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+            getAuth, GoogleAuthProvider, signInWithPopup, signInAnonymously,
             onAuthStateChanged, signOut
         } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import {
@@ -463,7 +464,7 @@
           measurementId: "G-8Q10D83PMQ"
         };
 
-        const app = initializeApp(firebaseConfig);
+        const app = initializeApp(firebaseConfig, 'managerPortal');
         const auth = getAuth(app);
         const db = getFirestore(app);
         const googleProvider = new GoogleAuthProvider();
@@ -530,60 +531,143 @@
         const getDocRef = (colName,id,storeId=state.storeId) => doc(db,'stores',storeId,colName,id);
         const matchesEmployee = (record, emp) => record.employeeId ? record.employeeId===emp.id : record.name===emp.name;
 
-        function showAuth(mode, message, detail='') {
-            const screen=getEl('auth-screen'), login=getEl('google-login-btn'), claim=getEl('claim-owner-btn'), logout=getEl('auth-logout-btn');
-            screen.classList.remove('hidden'); setText('auth-message',message); setText('auth-detail',detail);
-            login.classList.toggle('hidden', mode!=='login');
-            claim.classList.toggle('hidden', mode!=='claim');
-            logout.classList.toggle('hidden', mode==='login');
+        const isEmbeddedPreview = () => {
+            try { return window.self !== window.top; }
+            catch (_) { return true; }
+        };
+
+        // Google OAuth 無法在 ChatGPT／附件預覽／blob 頁面等暫時性來源正常完成。
+        // 這些環境常會開出 Firebase 白頁並顯示「The requested action is invalid」。
+        const isTemporaryPreviewOrigin = () => {
+            const protocol = String(location.protocol || '').toLowerCase();
+            const host = String(location.hostname || '').toLowerCase();
+            if (['file:', 'blob:', 'data:'].includes(protocol) || location.origin === 'null') return true;
+            const blockedHosts = [
+                'chatgpt.com', 'openai.com', 'oaistatic.com',
+                'usercontent.openai.com', 'sandbox', 'stackblitz.io'
+            ];
+            return blockedHosts.some(x => host === x || host.endsWith('.' + x) || host.includes(x));
+        };
+
+        const isUnsupportedAuthEnvironment = () => isEmbeddedPreview() || isTemporaryPreviewOrigin();
+
+        function setGoogleLoginReady(ready, label='使用 Google 登入') {
+            const btn=getEl('google-login-btn');
+            if(!btn)return;
+            btn.disabled=!ready;
+            btn.classList.toggle('opacity-60',!ready);
+            btn.classList.toggle('cursor-not-allowed',!ready);
+            setText('google-login-label',label);
         }
 
+        function showAuth(mode, message, detail='') {
+            const screen=getEl('auth-screen');
+            screen.classList.remove('hidden');
+            setText('auth-message',message);
+            setText('auth-detail',detail);
+            ['google-login-btn','claim-owner-btn','auth-logout-btn','open-browser-btn'].forEach(id=>getEl(id)?.classList.add('hidden'));
+        }
+
+        window.openInBrowser = () => {
+            if (isTemporaryPreviewOrigin()) {
+                return Modal.show({type:'alert',title:'需要正式網址',message:'目前是暫時預覽網址，開到新分頁仍不能完成 Google 登入。請先把 HTML 部署到 Firebase Hosting 或 GitHub Pages。'});
+            }
+            const opened=window.open(window.location.href,'_blank','noopener,noreferrer');
+            if(!opened) Modal.show({type:'alert',title:'無法開啟新分頁',message:'請使用瀏覽器選單中的「在瀏覽器開啟」或把正式網址貼到 Chrome／Safari。'});
+        };
+
         window.googleLogin = async () => {
-            try { await signInWithPopup(auth, googleProvider); }
-            catch (err) {
-                if(['auth/popup-blocked','auth/cancelled-popup-request','auth/operation-not-supported-in-this-environment'].includes(err.code)) await signInWithRedirect(auth,googleProvider);
-                else Modal.show({type:'alert',title:'登入失敗',message:err.message});
+            // 直接擋住不支援的預覽來源，避免 Firebase 彈出白頁。
+            if (isUnsupportedAuthEnvironment()) {
+                return Modal.show({
+                    type:'alert',
+                    title:'這個預覽頁不能做 Google 登入',
+                    message:'你看到的白畫面「The requested action is invalid」不是帳號錯誤，而是 Firebase 在附件／ChatGPT／內嵌預覽環境收不到完整的登入資料。\n\n請先把 HTML 部署到正式的 HTTPS 網址（例如 Firebase Hosting 或 GitHub Pages），再從該網址登入。單純把目前預覽網址開到新分頁仍然可能失敗。'
+                });
+            }
+            if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+                return Modal.show({type:'alert',title:'需要 HTTPS 網址',message:'Google 登入只能在正式 HTTPS 網址或 localhost 測試，不能直接開啟下載的 HTML 檔案。'});
+            }
+
+            setGoogleLoginReady(false,'正在開啟 Google 登入…');
+            try {
+                await signInWithPopup(auth, googleProvider);
+            } catch (err) {
+                const friendly={
+                    'auth/unauthorized-domain':'目前這個網站網域尚未加入 Firebase Authentication 的「已授權網域」。',
+                    'auth/popup-blocked':'瀏覽器封鎖了 Google 登入視窗，請允許此網站開啟彈出式視窗後重試。',
+                    'auth/cancelled-popup-request':'上一個登入視窗尚未完成，請關閉後再按一次。',
+                    'auth/operation-not-supported-in-this-environment':'目前瀏覽環境不支援 Google 登入，請改用 Chrome 或 Safari 開啟正式網站。',
+                    'auth/popup-closed-by-user':'Google 登入視窗已被關閉，請重新按一次登入。',
+                    'auth/network-request-failed':'網路連線失敗，請確認網路後再試。',
+                    'auth/operation-not-allowed':'Firebase 專案尚未啟用 Google 登入方式。'
+                };
+                Modal.show({type:'alert',title:'Google 登入失敗',message:friendly[err.code]||`${err.code||''}\n${err.message||'無法完成 Google 登入'}`.trim()});
+            } finally {
+                if(!auth.currentUser)setGoogleLoginReady(true);
             }
         };
-        window.logoutApp = async () => { await signOut(auth); location.reload(); };
 
-        window.claimFirstOwner = async () => {
-            if(!state.user) return;
-            const ref=doc(db,'settings','app');
-            try {
-                await runTransaction(db, async tx => {
-                    const snap=await tx.get(ref);
-                    if(snap.exists()) throw new Error('管理員已建立，請重新登入。');
-                    tx.set(ref,{ownerUid:state.user.uid,ownerEmail:normalizeEmail(state.user.email),createdAt:Date.now()});
-                });
-                await resolveAccess(state.user);
-            } catch(err) { Modal.show({type:'alert',title:'無法建立管理員',message:err.message}); }
-        };
+        // 管理端不顯示 Google 登入。Firebase 只在背景建立匿名裝置身分，
+        // 用來保護 Firestore，不會要求店主選擇帳號。
+        setGoogleLoginReady(false,'管理端免登入');
+        window.logoutApp = () => Modal.show({
+            type:'alert',
+            title:'管理端已綁定此瀏覽器',
+            message:'管理端不需要登出。請勿清除這個網站的瀏覽資料，否則此裝置識別碼會改變。'
+        });
+        window.claimFirstOwner = async () => {};
 
         onAuthStateChanged(auth, async user => {
             state.user=user;
-            if(!user) { showAuth('login','請使用已登記的 Google 帳號登入。','管理員需先在員工資料中填入員工的 Google Email。'); return; }
+            if(!user) {
+                showAuth('loading','管理端正在安全連線…','不需要 Google 登入，系統會在背景綁定這個瀏覽器。');
+                try {
+                    await signInAnonymously(auth);
+                } catch(err) {
+                    showAuth('error','管理端無法連線',`請先在 Firebase Authentication 啟用「匿名」登入。\n\n${err.code||''} ${err.message||''}`.trim());
+                }
+                return;
+            }
             await resolveAccess(user);
         });
 
         async function resolveAccess(user) {
             const appRef=doc(db,'settings','app');
-            const appSnap=await getDoc(appRef);
+            let appSnap=await getDoc(appRef);
+
             if(!appSnap.exists()) {
-                showAuth('claim',`目前尚未建立管理員。登入帳號：${user.email}`,'請由店主本人按下按鈕；第一位管理員建立後，其他帳號不能再次認領。');
+                try {
+                    await runTransaction(db, async tx => {
+                        const snap=await tx.get(appRef);
+                        if(!snap.exists()) {
+                            tx.set(appRef,{
+                                ownerUid:user.uid,
+                                adminUids:[user.uid],
+                                ownerType:'local-device',
+                                createdAt:Date.now()
+                            });
+                        }
+                    });
+                    appSnap=await getDoc(appRef);
+                } catch(err) {
+                    showAuth('error','無法建立管理裝置',`${err.code||''} ${err.message||''}`.trim());
+                    return;
+                }
+            }
+
+            const appData=appSnap.data()||{};
+            const admins=Array.isArray(appData.adminUids)?appData.adminUids:[];
+            if(appData.ownerUid===user.uid || admins.includes(user.uid)) {
+                await startSession('admin','xinyi',null);
                 return;
             }
-            if(appSnap.data().ownerUid===user.uid) {
-                await startSession('admin','xinyi',null); return;
-            }
-            const email=normalizeEmail(user.email);
-            const dirSnap=await getDoc(doc(db,'employeeDirectory',email));
-            if(dirSnap.exists() && dirSnap.data().active!==false) {
-                const profile={id:dirSnap.id,...dirSnap.data()};
-                const stores=profileStoreIds(profile);
-                await startSession('employee',profile.primaryStoreId||profile.storeId||stores[0],profile); return;
-            }
-            showAuth('denied',`此 Google 帳號尚未被加入員工名單：${user.email}`,'請管理員在「員工」頁新增資料並填入完全相同的 Google Email。');
+
+            showAuth(
+                'denied',
+                '這個瀏覽器尚未被授權為管理裝置。',
+                `管理端已綁定其他瀏覽器。請使用第一次開啟管理頁的原裝置。\n\n若需要更換裝置，請到 Firestore 的 settings/app，把 ownerUid 改成：\n${user.uid}`
+            );
         }
 
         async function startSession(role, storeId, profile) {
@@ -605,7 +689,7 @@
             getEl('store-select').classList.toggle('hidden',!canSwitch);
             getEl('store-badge').classList.toggle('hidden',canSwitch);
             const job=state.employeeProfile?.jobRole||'';
-            setText('user-summary',`${state.user?.email||''}｜${isAdmin()?'管理員':(job||'員工')}`);
+            setText('user-summary',isAdmin()?'管理端｜此瀏覽器':`${state.user?.email||''}｜${job||'員工'}`);
         }
 
         function populateStoreSelectors() {
