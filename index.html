@@ -1540,13 +1540,50 @@
             populateShiftOptions();window.switchLeaveMode('single');getEl('leave-modal').classList.remove('hidden');
         };
         window.switchLeaveMode=m=>{state.leaveMode=m;['single','range','recurring'].forEach(k=>{const b=getEl('lm-'+k);b.classList.toggle('bg-white',k===m);b.classList.toggle('shadow-sm',k===m);b.classList.toggle('text-stone-400',k!==m);});getEl('lv-date-single').classList.toggle('hidden',m!=='single');getEl('lv-date-range').classList.toggle('hidden',m==='single');getEl('lv-weekdays').classList.toggle('hidden',m!=='recurring');};
+        const parseDateOnlyUTC=value=>{
+            const [y,m,d]=String(value||'').split('-').map(Number);
+            if(!y||!m||!d)return null;
+            return new Date(Date.UTC(y,m-1,d));
+        };
+        const formatDateOnlyUTC=dt=>`${dt.getUTCFullYear()}-${String(dt.getUTCMonth()+1).padStart(2,'0')}-${String(dt.getUTCDate()).padStart(2,'0')}`;
+
         window.saveLeave = async () => {
             if(!isAdmin())return;
             const emp=state.employees.find(e=>e.id===getEl('lv-emp').value);if(!emp)return;
             const type=getEl('lv-type').value,period=getEl('lv-period').value,dates=[];
-            if(state.leaveMode==='single'){const d=getEl('lv-date').value;if(!d)return Modal.show({type:'alert',message:'請選日期'});dates.push(d);}else{const s=getEl('lv-start').value,e=getEl('lv-end').value;if(!s||!e)return Modal.show({type:'alert',message:'請選日期'});for(let dt=new Date(s+'T00:00:00');dt<=new Date(e+'T00:00:00');dt.setDate(dt.getDate()+1)){if(state.leaveMode==='recurring'&&!getEl('wd-'+dt.getDay()).checked)continue;dates.push(dt.toISOString().slice(0,10));}}
-            for(const date of dates){const duplicate=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===date&&(l.period==='all'||period==='all'||l.period===period));if(duplicate)return Modal.show({type:'alert',message:`${date} 已有重複請假紀錄。`});}
-            for(const date of dates)await addDoc(getCollection('leaves'),{employeeId:emp.id,name:emp.name,date,type,period,createdAt:Date.now()});
+
+            if(state.leaveMode==='single'){
+                const d=getEl('lv-date').value;
+                if(!d)return Modal.show({type:'alert',message:'請選日期'});
+                dates.push(d);
+            }else{
+                const s=getEl('lv-start').value,e=getEl('lv-end').value;
+                if(!s||!e)return Modal.show({type:'alert',message:'請選日期'});
+
+                const start=parseDateOnlyUTC(s),end=parseDateOnlyUTC(e);
+                if(!start||!end||start>end)return Modal.show({type:'alert',message:'日期範圍不正確'});
+
+                if(state.leaveMode==='recurring'){
+                    const hasWeekday=[0,1,2,3,4,5,6].some(day=>getEl('wd-'+day)?.checked);
+                    if(!hasWeekday)return Modal.show({type:'alert',message:'請至少選擇一個星期'});
+                }
+
+                for(let dt=new Date(start);dt<=end;dt.setUTCDate(dt.getUTCDate()+1)){
+                    if(state.leaveMode==='recurring'&&!getEl('wd-'+dt.getUTCDay()).checked)continue;
+                    dates.push(formatDateOnlyUTC(dt));
+                }
+            }
+
+            if(!dates.length)return Modal.show({type:'alert',message:'這個範圍內沒有符合條件的日期'});
+
+            for(const date of dates){
+                const duplicate=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===date&&(l.period==='all'||period==='all'||l.period===period));
+                if(duplicate)return Modal.show({type:'alert',message:`${date} 已有重複請假紀錄。`});
+            }
+
+            for(const date of dates){
+                await addDoc(getCollection('leaves'),{employeeId:emp.id,name:emp.name,date,type,period,createdAt:Date.now()});
+            }
             getEl('leave-modal').classList.add('hidden');
         };
         window.deleteLeave=id=>{if(isAdmin())Modal.show({type:'confirm',message:'取消這筆請假？',onConfirm:()=>deleteDoc(getDocRef('leaves',id))});};
