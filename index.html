@@ -334,7 +334,6 @@
             border-radius: 14px !important;
             padding: 10px !important;
         }
-        #day-modal button[onclick="saveDaySchedule()"],
         #leave-modal button[onclick="saveLeave()"] {
             background: var(--soft-accent) !important;
             color: white !important;
@@ -421,6 +420,92 @@
         .shift-visible-time {
             width:100%;padding-left:2px;font-size:11px;line-height:1.25rem;font-weight:700;color:var(--soft-sub);
             font-variant-numeric:tabular-nums;
+        }
+
+    
+        /* TOUCH-SCHEDULING-V1 */
+        .quick-schedule-panel {
+            max-height: 46vh;
+            overflow-y: auto;
+            background: var(--soft-card) !important;
+        }
+        .quick-employee-grid {
+            display: grid;
+            grid-template-columns: repeat(3,minmax(0,1fr));
+            gap: 9px;
+        }
+        .quick-employee-btn {
+            min-height: 52px;
+            border: 0;
+            border-radius: 16px;
+            background: var(--soft-card-2);
+            color: var(--soft-text);
+            font-size: 15px;
+            font-weight: 800;
+            padding: 9px 8px;
+            box-shadow:
+                -4px -4px 9px rgba(255,255,255,.70),
+                4px 4px 9px rgba(139,100,105,.16);
+            transition: transform .12s ease,box-shadow .12s ease,background .12s ease;
+        }
+        .quick-employee-btn:active {
+            transform: scale(.98);
+        }
+        .quick-employee-btn.selected {
+            background: #7B6065;
+            color: white;
+            box-shadow:
+                inset 2px 2px 5px rgba(65,42,46,.22),
+                inset -2px -2px 5px rgba(255,255,255,.14);
+        }
+        .quick-shift-grid {
+            display: grid;
+            grid-template-columns: repeat(2,minmax(0,1fr));
+            gap: 10px;
+        }
+        .quick-shift-btn {
+            min-height: 70px;
+            border: 0;
+            border-radius: 18px;
+            background: var(--soft-card-2);
+            color: var(--soft-text);
+            padding: 10px 8px;
+            text-align: center;
+            box-shadow:
+                -4px -4px 9px rgba(255,255,255,.72),
+                4px 4px 10px rgba(139,100,105,.17);
+            transition: transform .12s ease,box-shadow .12s ease;
+        }
+        .quick-shift-btn:active {
+            transform: scale(.98);
+            box-shadow:
+                inset 3px 3px 7px rgba(139,100,105,.14),
+                inset -3px -3px 7px rgba(255,255,255,.58);
+        }
+        .quick-shift-name {
+            display:block;
+            font-size:14px;
+            font-weight:900;
+            line-height:1.2;
+        }
+        .quick-shift-time {
+            display:block;
+            font-size:12px;
+            font-weight:750;
+            color:var(--soft-sub);
+            margin-top:5px;
+            font-variant-numeric:tabular-nums;
+        }
+        .quick-shift-btn.flexible {
+            grid-column:1/-1;
+            min-height:54px;
+        }
+        .quick-shift-btn.busy {
+            opacity:.55;
+            pointer-events:none;
+        }
+        @media (max-width:420px){
+            .quick-employee-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
         }
 
     </style>
@@ -722,7 +807,7 @@
 
     <!-- Day Schedule Modal -->
     <div id="day-modal" class="fixed inset-0 bg-stone-900/50 z-50 hidden flex items-center justify-center p-4 backdrop-blur-[2px]">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden h-[70vh] flex flex-col">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden h-[82vh] flex flex-col">
             <div class="p-4 border-b border-stone-100 flex justify-between items-center bg-stone-50">
                 <h3 class="font-bold text-coffee-800" id="day-modal-title">日期</h3>
                 <button onclick="document.getElementById('day-modal').classList.add('hidden')" class="text-stone-400 px-2 font-bold">✕</button>
@@ -732,13 +817,24 @@
                 <div><h4 class="text-xs font-bold text-stone-400 uppercase mb-2">當日班表</h4><div id="day-shift-list" class="space-y-2"></div></div>
                 <div><h4 class="text-xs font-bold text-stone-400 uppercase mb-2">當日請假</h4><div id="day-leave-list" class="space-y-2 text-sm text-stone-500"></div></div>
             </div>
-            <div class="p-4 bg-stone-50 border-t border-stone-100 admin-only">
-                <div class="grid grid-cols-[1fr_120px_auto] gap-2">
-                    <select id="day-add-emp" class="border border-stone-200 rounded-lg p-2 text-sm outline-none min-w-0"></select>
-                    <select id="day-add-shift" onchange="updateDayShiftFields()" class="border border-stone-200 rounded-lg p-2 text-sm outline-none"></select>
-                    <button onclick="saveDaySchedule()" class="bg-coffee-600 text-white px-3 rounded-lg text-sm font-bold shadow-sm">新增</button>
+            <div class="p-4 bg-stone-50 border-t border-stone-100 admin-only quick-schedule-panel">
+                <div class="mb-3">
+                    <div class="flex items-center justify-between gap-2 mb-2">
+                        <div class="text-xs font-extrabold text-[#655457]">① 點員工</div>
+                        <div id="quick-selected-employee" class="text-[11px] font-bold text-[#957D82]">尚未選擇</div>
+                    </div>
+                    <div id="day-employee-buttons" class="quick-employee-grid"></div>
                 </div>
-                <div id="flex-time-fields" class="hidden mt-3 bg-white border border-stone-200 rounded-xl p-3 space-y-2">
+
+                <div>
+                    <div class="text-xs font-extrabold text-[#655457] mb-2">② 點上班時段，立即排班</div>
+                    <div id="day-shift-buttons" class="quick-shift-grid"></div>
+                </div>
+
+                <div id="quick-hint" class="mt-3 text-center text-[11px] text-[#957D82]">先點員工，再點時段即可完成。</div>
+
+                <div id="flex-time-fields" class="hidden mt-3 bg-white border border-stone-200 rounded-xl p-3 space-y-3">
+                    <div class="text-sm font-bold text-[#655457]">彈性班時間</div>
                     <div class="grid grid-cols-2 gap-2">
                         <div><label class="text-[10px] font-bold text-stone-400">上班</label><select id="flex-start" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></select></div>
                         <div><label class="text-[10px] font-bold text-stone-400">下班</label><select id="flex-end" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></select></div>
@@ -747,7 +843,7 @@
                         <div><label class="text-[10px] font-bold text-stone-400">休息開始（選填）</label><select id="flex-break-start" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></select></div>
                         <div><label class="text-[10px] font-bold text-stone-400">休息結束（選填）</label><select id="flex-break-end" class="w-full border border-stone-200 rounded-lg p-2 text-sm"></select></div>
                     </div>
-                    <p class="text-[10px] text-stone-400">彈性班會依上、下班及休息時間自動計算計薪時數。</p>
+                    <button onclick="saveQuickFlexibleShift()" class="w-full py-3 rounded-xl bg-[#7B6065] text-white font-bold">加入彈性班</button>
                 </div>
             </div>
         </div>
@@ -831,7 +927,7 @@
             user:null, accessRole:'admin', employeeProfile:null, storeId:'xinyi', accessibleStoreIds:['xinyi','ntu'], unsubs:[],
             transactions:[], employees:[], leaves:[], shifts:[], attendance:[], notices:[],
             currentMonth:new Date().toISOString().slice(0,7), type:'out', view:'home', reportView:'chart', reportPeriod:'month',
-            selectedDate:null, leaveMode:'single', listTab:'tx'
+            selectedDate:null, leaveMode:'single', listTab:'tx', quickEmployeeId:null, quickShiftName:null
         };
 
         const getEl = id => document.getElementById(id);
@@ -1072,16 +1168,64 @@
         }
 
         function populateShiftOptions() {
-            const day=getEl('day-add-shift'); day.innerHTML='';
-            currentStore().shifts.forEach(s=>{const o=document.createElement('option');o.value=s.name;const time=s.flexible?'自訂時間':(s.displayTime||`${s.startTime}–${s.endTime}`);o.textContent=`${s.name}｜${time}`;day.appendChild(o);});
-            const period=getEl('lv-period'); period.innerHTML='<option value="all">全天</option>';
-            currentStore().shifts.forEach(s=>{const o=document.createElement('option');o.value=s.name;o.textContent=s.name;period.appendChild(o);});
-            window.updateDayShiftFields();
+            const period=getEl('lv-period');
+            if(period){
+                period.innerHTML='<option value="all">全天</option>';
+                currentStore().shifts.forEach(s=>{const o=document.createElement('option');o.value=s.name;o.textContent=s.name;period.appendChild(o);});
+            }
+            renderQuickScheduleControls();
         }
 
-        window.updateDayShiftFields = () => {
-            const def=currentStore().shifts.find(s=>s.name===getEl('day-add-shift').value);
-            getEl('flex-time-fields').classList.toggle('hidden',!(def&&def.flexible));
+        function renderQuickScheduleControls(){
+            const empWrap=getEl('day-employee-buttons'),shiftWrap=getEl('day-shift-buttons'),selected=getEl('quick-selected-employee'),hint=getEl('quick-hint');
+            if(!empWrap||!shiftWrap)return;
+
+            const eligible=state.employees;
+            if(state.quickEmployeeId&&!eligible.some(e=>e.id===state.quickEmployeeId))state.quickEmployeeId=null;
+
+            empWrap.innerHTML='';
+            if(!eligible.length){
+                empWrap.innerHTML='<div class="col-span-full text-center text-xs text-stone-400 py-3">目前沒有員工，請先到「員工」新增。</div>';
+            }else{
+                eligible.forEach(emp=>{
+                    const btn=document.createElement('button');
+                    const active=state.quickEmployeeId===emp.id;
+                    btn.type='button';
+                    btn.className=`quick-employee-btn ${active?'selected':''}`;
+                    btn.innerHTML=`<span class="inline-flex items-center justify-center gap-2"><span class="w-2.5 h-2.5 rounded-full" style="background:${emp.color||'#a67c52'}"></span><span>${emp.name}</span></span>`;
+                    btn.onclick=()=>window.selectQuickEmployee(emp.id);
+                    empWrap.appendChild(btn);
+                });
+            }
+
+            const emp=eligible.find(e=>e.id===state.quickEmployeeId);
+            if(selected)selected.textContent=emp?`已選：${emp.name}`:'尚未選擇';
+            if(hint)hint.textContent=emp?`現在直接點一個時段，就會排給 ${emp.name}。`:'先點員工，再點時段即可完成。';
+
+            shiftWrap.innerHTML='';
+            currentStore().shifts.forEach(def=>{
+                const btn=document.createElement('button');
+                btn.type='button';
+                btn.className=`quick-shift-btn ${def.flexible?'flexible':''}`;
+                const time=def.flexible?'自行選擇整點／半點':(def.displayTime||`${def.startTime}–${def.endTime}`);
+                btn.innerHTML=`<span class="quick-shift-name">${def.name}</span><span class="quick-shift-time">${time}</span>`;
+                btn.onclick=()=>def.flexible?window.chooseQuickFlexible(def.name):window.quickAddShift(def.name);
+                shiftWrap.appendChild(btn);
+            });
+        }
+
+        window.selectQuickEmployee=id=>{
+            state.quickEmployeeId=id;
+            state.quickShiftName=null;
+            getEl('flex-time-fields')?.classList.add('hidden');
+            renderQuickScheduleControls();
+        };
+
+        window.chooseQuickFlexible=shiftName=>{
+            if(!state.quickEmployeeId)return Modal.show({type:'alert',message:'請先點一位員工'});
+            state.quickShiftName=shiftName;
+            getEl('flex-time-fields')?.classList.remove('hidden');
+            getEl('flex-time-fields')?.scrollIntoView({behavior:'smooth',block:'nearest'});
         };
 
         function populateHalfHourSelects(){
@@ -1460,21 +1604,91 @@
             if(!shifts.length)sList.innerHTML='<div class="text-xs text-stone-400 italic">本日無排班</div>';
             shifts.forEach(s=>{const emp=state.employees.find(e=>matchesEmployee(s,e))||{color:'#a67c52'};const d=document.createElement('div');d.className='flex justify-between items-center bg-stone-50 p-2 rounded-lg border border-stone-100 text-sm';const meta=getShiftMeta(s);d.innerHTML=`<div class="min-w-0"><div class="flex items-center gap-2 flex-wrap"><span class="w-2 h-2 rounded-full" style="background:${emp.color}"></span><span class="font-bold" style="color:${emp.color}">${s.name}</span><span class="text-xs text-stone-400">${meta.location?`${meta.location}｜`:''}${s.shift}</span></div><div class="text-xs text-stone-500 ml-4 mt-1 font-bold tabular-nums">${shiftTimeText(s)}｜計薪 ${meta.paidHours}h</div></div><button onclick="deleteShift('${s.id}')" class="text-red-400 text-xs font-bold px-2 py-1 bg-red-50 rounded">刪除</button>`;sList.appendChild(d);});
             const lList=getEl('day-leave-list');lList.innerHTML='';const leaves=state.leaves.filter(l=>l.date===date);if(!leaves.length)lList.textContent='無';leaves.forEach(l=>{const d=document.createElement('div');d.className='bg-stone-50 p-2 rounded text-xs';d.textContent=`${l.name}（${l.type}－${l.period==='all'?'全天':l.period}）`;lList.appendChild(d);});
-            const empSel=getEl('day-add-emp');empSel.innerHTML='';state.employees.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;empSel.appendChild(o);});
+            if(!state.quickEmployeeId&&state.employees.length)state.quickEmployeeId=state.employees[0].id;
+            state.quickShiftName=null;
+            getEl('flex-time-fields')?.classList.add('hidden');
             populateShiftOptions();
         };
 
-        window.saveDaySchedule = async () => {
-            if(!isAdmin())return;
-            const emp=state.employees.find(e=>e.id===getEl('day-add-emp').value),shiftName=getEl('day-add-shift').value,def=getShiftDef(shiftName);if(!emp||!def||!state.selectedDate)return;
-            let startTime=def.startTime||'',endTime=def.endTime||'',breakStart=def.breakStart||'',breakEnd=def.breakEnd||'',paidHours=def.paidHours||0;
-            if(def.flexible){startTime=getEl('flex-start').value;endTime=getEl('flex-end').value;breakStart=getEl('flex-break-start').value;breakEnd=getEl('flex-break-end').value;if(!startTime||!endTime)return Modal.show({type:'alert',message:'彈性班請輸入上班與下班時間'});if((breakStart&&!breakEnd)||(!breakStart&&breakEnd))return Modal.show({type:'alert',message:'休息時間請同時填寫開始與結束'});paidHours=calcPaidHours(startTime,endTime,breakStart,breakEnd);if(paidHours<=0)return Modal.show({type:'alert',message:'時間設定不正確，請確認下班時間晚於上班時間'});}
-            const leave=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===state.selectedDate&&(l.period==='all'||l.period===shiftName));if(leave)return Modal.show({type:'alert',message:`${emp.name} 當天已有「${leave.period==='all'?'全天':leave.period}」請假。`});
-            const candidate={shift:shiftName,startTime,endTime,breakStart,breakEnd,paidHours};const conflict=state.shifts.find(s=>s.date===state.selectedDate&&matchesEmployee(s,emp)&&overlaps(s,candidate));if(conflict)return Modal.show({type:'alert',message:`時間衝突：${emp.name} 已排 ${conflict.shift}（${shiftTimeText(conflict)}）。`});
+        async function createQuickShift(emp,def,override={}){
+            if(!emp||!def||!state.selectedDate)return false;
+            const startTime=override.startTime??def.startTime??'';
+            const endTime=override.endTime??def.endTime??'';
+            const breakStart=override.breakStart??def.breakStart??'';
+            const breakEnd=override.breakEnd??def.breakEnd??'';
+            const paidHours=override.paidHours??def.paidHours??calcPaidHours(startTime,endTime,breakStart,breakEnd);
+
+            if(!startTime||!endTime)return false;
+            const leave=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===state.selectedDate&&(l.period==='all'||l.period===def.name));
+            if(leave){
+                Modal.show({type:'alert',message:`${emp.name} 當天已有「${leave.period==='all'?'全天':leave.period}」請假。`});
+                return false;
+            }
+
+            const candidate={shift:def.name,startTime,endTime,breakStart,breakEnd,paidHours};
+            const conflict=state.shifts.find(s=>s.date===state.selectedDate&&matchesEmployee(s,emp)&&overlaps(s,candidate));
+            if(conflict){
+                Modal.show({type:'alert',message:`時間衝突：${emp.name} 已排 ${conflict.shift}（${shiftTimeText(conflict)}）。`});
+                return false;
+            }
+
             const crossConflict=await findCrossStoreConflict(emp,state.selectedDate,candidate);
-            if(crossConflict)return Modal.show({type:'alert',message:`跨店時間衝突：${emp.name} 已在${STORE_CONFIG[crossConflict.storeId]?.name||'另一分店'}排 ${crossConflict.shift}（${shiftTimeText(crossConflict)}）。`});
-            await addDoc(getCollection('shifts'),{date:state.selectedDate,employeeId:emp.id,email:emp.email||'',name:emp.name,shift:shiftName,code:def.code,location:def.location||'',displayTime:def.displayTime||'',startTime,endTime,breakStart,breakEnd,paidHours,time:`${startTime}-${endTime}`,createdAt:Date.now()});
-            ['flex-start','flex-end','flex-break-start','flex-break-end'].forEach(id=>getEl(id).value='');
+            if(crossConflict){
+                Modal.show({type:'alert',message:`跨店時間衝突：${emp.name} 已在${STORE_CONFIG[crossConflict.storeId]?.name||'另一分店'}排 ${crossConflict.shift}（${shiftTimeText(crossConflict)}）。`});
+                return false;
+            }
+
+            await addDoc(getCollection('shifts'),{
+                date:state.selectedDate,
+                employeeId:emp.id,
+                email:emp.email||'',
+                name:emp.name,
+                shift:def.name,
+                code:def.code,
+                location:def.location||'',
+                displayTime:def.flexible?'':(def.displayTime||''),
+                startTime,endTime,breakStart,breakEnd,
+                paidHours,
+                time:`${startTime}-${endTime}`,
+                createdAt:Date.now()
+            });
+            return true;
+        }
+
+        window.quickAddShift=async shiftName=>{
+            if(!isAdmin())return;
+            const emp=state.employees.find(e=>e.id===state.quickEmployeeId);
+            if(!emp)return Modal.show({type:'alert',message:'請先點一位員工'});
+            const def=getShiftDef(shiftName);
+            if(!def)return;
+            if(def.flexible)return window.chooseQuickFlexible(shiftName);
+
+            const hint=getEl('quick-hint');
+            if(hint)hint.textContent=`正在排：${emp.name}｜${def.name}…`;
+            const ok=await createQuickShift(emp,def);
+            if(ok&&hint)hint.textContent=`✓ 已排：${emp.name}｜${def.name}`;
+        };
+
+        window.saveQuickFlexibleShift=async()=>{
+            if(!isAdmin())return;
+            const emp=state.employees.find(e=>e.id===state.quickEmployeeId);
+            const def=getShiftDef(state.quickShiftName||'彈性班');
+            if(!emp)return Modal.show({type:'alert',message:'請先點一位員工'});
+            if(!def)return Modal.show({type:'alert',message:'找不到彈性班設定'});
+
+            const startTime=getEl('flex-start').value,endTime=getEl('flex-end').value,breakStart=getEl('flex-break-start').value,breakEnd=getEl('flex-break-end').value;
+            if(!startTime||!endTime)return Modal.show({type:'alert',message:'請選擇上班與下班時間'});
+            if((breakStart&&!breakEnd)||(!breakStart&&breakEnd))return Modal.show({type:'alert',message:'休息時間請同時選擇開始與結束'});
+            const paidHours=calcPaidHours(startTime,endTime,breakStart,breakEnd);
+            if(paidHours<=0)return Modal.show({type:'alert',message:'時間設定不正確，請確認下班時間晚於上班時間'});
+
+            const ok=await createQuickShift(emp,def,{startTime,endTime,breakStart,breakEnd,paidHours});
+            if(ok){
+                state.quickShiftName=null;
+                getEl('flex-time-fields')?.classList.add('hidden');
+                const hint=getEl('quick-hint');
+                if(hint)hint.textContent=`✓ 已排：${emp.name}｜${startTime}–${endTime}`;
+            }
         };
         window.deleteShift=id=>{if(isAdmin())deleteDoc(getDocRef('shifts',id));};
 
