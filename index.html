@@ -605,7 +605,7 @@
             <!-- Attendance Rate View -->
             <div id="report-attn" class="hidden space-y-3">
                  <div class="bg-white p-4 rounded-2xl shadow-sm border border-stone-100">
-                     <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤統計 (Schedules vs Logs)</h4>
+                     <h4 class="font-bold text-coffee-800 mb-3 text-sm">本月出勤率／準時率</h4>
                      <div id="attn-stats-list" class="space-y-3"></div>
                      <div id="attn-stats-empty" class="text-center text-stone-400 text-xs py-4">無排班或打卡紀錄</div>
                  </div>
@@ -1779,11 +1779,59 @@
             applyRoleUI();
         }
 
-        function renderList(){const c=getEl('attendance-list');if(!c)return;c.innerHTML='';const data=state.attendance.filter(a=>a.date.startsWith(state.currentMonth));getEl('attn-empty-msg').classList.toggle('hidden',data.length>0);data.forEach(a=>{const d=document.createElement('div');d.className='flex justify-between items-center p-3';d.innerHTML=`<div><span class="font-mono text-xs bg-stone-100 px-1 rounded">${a.date.slice(5)}</span><b class="ml-2">${a.name}</b></div><div class="text-xs text-stone-500">${a.time}<span class="text-green-600 bg-green-50 px-1 rounded ml-1">${a.status||'準時'}</span></div>`;c.appendChild(d);});}
+        function renderList(){
+            const c=getEl('attendance-list');if(!c)return;
+            c.innerHTML='';
+            const data=state.attendance.filter(a=>a.date?.startsWith(state.currentMonth));
+            getEl('attn-empty-msg').classList.toggle('hidden',data.length>0);
+            data.forEach(a=>{
+                const d=document.createElement('div');
+                d.className='flex justify-between items-start gap-3 p-3';
+                const status=a.status||'未判定';
+                const statusClass=status==='準時'?'text-green-700 bg-green-50':status==='遲到'?'text-red-700 bg-red-50':'text-stone-500 bg-stone-100';
+                const late=Number(a.minutesLate||0)>0?`｜遲 ${a.minutesLate} 分`:'';
+                const end=a.checkOutTime?`–${a.checkOutTime}`:'';
+                const source=a.source==='geofence'?'自動':'手動';
+                d.innerHTML=`<div><span class="font-mono text-xs bg-stone-100 px-1 rounded">${a.date.slice(5)}</span><b class="ml-2">${a.name||'夥伴'}</b><div class="text-[10px] text-stone-400 mt-1">排班 ${a.scheduledStart||'—'}｜${source}記錄</div></div><div class="text-right text-xs text-stone-500"><div class="font-bold">${a.time||'—'}${end}</div><span class="${statusClass} px-1.5 py-0.5 rounded ml-1">${status}${late}</span></div>`;
+                c.appendChild(d);
+            });
+        }
 
         function render(){const c=state.transactions.filter(t=>t.date?.startsWith(state.currentMonth));let inc=0,exp=0;c.forEach(t=>t.type==='in'?inc+=Number(t.amount)||0:exp+=Number(t.amount)||0);setText('disp-income',formatMoney(inc));setText('disp-expense',formatMoney(exp));const net=inc-exp,ne=getEl('disp-net');if(ne){ne.textContent=formatMoney(net);ne.className=`text-xl font-bold font-mono ${net>=0?'text-coffee-700':'text-red-500'}`;}const tb=getEl('transaction-list');if(tb){tb.innerHTML='';getEl('empty-msg').classList.toggle('hidden',c.length>0);c.forEach(t=>{let name=t.name;if(t.qty&&t.cat==='stock')name+=` <span class="text-[10px] bg-orange-100 px-1 rounded">${t.qty}${t.unit}</span>`;const d=document.createElement('div');d.className='flex justify-between items-center p-4';d.innerHTML=`<div><div class="text-xs text-stone-400">${t.date.slice(5)}</div><b class="text-sm">${name}</b></div><div class="flex items-center gap-2"><b class="${t.type==='in'?'text-green-600':'text-coffee-700'}">${formatMoney(t.amount)}</b><button onclick="safeDeleteTx('${t.id}')" class="text-stone-300">✕</button></div>`;tb.appendChild(d);});}}
 
-        function renderReport(){const range=getRange(state.reportPeriod,state.currentMonth),c=calcStats(state.transactions,range.start,range.end),p=calcStats(state.transactions,range.pStart,range.pEnd);setText('report-date-range',`${range.start} ~ ${range.end}`);const sc=(id,cv,pv)=>{setText(id+'-curr',formatMoney(cv));const diff=cv-pv,pct=pv?Math.round(diff/Math.abs(pv)*100):(cv?100:0);getEl(id+'-diff').innerHTML=`<span class="${diff>=0?'text-green-600':'text-red-500'} font-bold">${diff>=0?'▲':'▼'} ${Math.abs(pct)}%</span><span class="text-stone-400 ml-1">vs 上期 ${formatMoney(pv)}</span>`;};sc('comp-inc',c.inc,p.inc);sc('comp-net',c.net,p.net);const ct=getEl('pie-chart'),ld=getEl('pie-legend');ct.innerHTML='';ld.innerHTML='';const map={};c.txs.filter(t=>t.type==='out').forEach(t=>map[t.name]=(map[t.name]||0)+Number(t.amount||0));const data=Object.entries(map).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);if(!data.length)ct.innerHTML='<text x="50" y="50" text-anchor="middle" fill="#ccc" font-size="10" transform="rotate(90 50 50)">無資料</text>';else{const total=data.reduce((s,x)=>s+x.value,0);let angle=0;data.forEach((x,i)=>{const pc=x.value/total,deg=pc*360,color=CONFIG.colors[i%CONFIG.colors.length],x1=50+40*Math.cos(Math.PI*angle/180),y1=50+40*Math.sin(Math.PI*angle/180),x2=50+40*Math.cos(Math.PI*(angle+deg)/180),y2=50+40*Math.sin(Math.PI*(angle+deg)/180),path=data.length===1?'M 50 50 m -40 0 a 40 40 0 1 0 80 0 a 40 40 0 1 0 -80 0':`M 50 50 L ${x1} ${y1} A 40 40 0 ${deg>180?1:0} 1 ${x2} ${y2} Z`;const pth=document.createElementNS('http://www.w3.org/2000/svg','path');pth.setAttribute('d',path);pth.setAttribute('fill',color);pth.setAttribute('stroke','#fff');ct.appendChild(pth);angle+=deg;const item=document.createElement('div');item.innerHTML=`<span class="inline-block w-2.5 h-2.5 rounded-full mr-1" style="background:${color}"></span>${x.name} ${Math.round(pc*100)}%`;ld.appendChild(item);});}const sl=getEl('stock-list');sl.innerHTML='';const items=Object.keys(c.stock);getEl('stock-empty-msg').classList.toggle('hidden',items.length>0);items.forEach(n=>{const x=c.stock[n],prev=p.stock[n]||{qty:0},d=document.createElement('div');d.className='bg-white p-3 rounded-xl flex justify-between';d.innerHTML=`<b>${n}</b><div class="text-right"><b>${x.qty} ${x.unit||''}</b><div class="text-xs text-stone-400">上期 ${prev.qty}</div></div>`;sl.appendChild(d);});const al=getEl('attn-stats-list');al.innerHTML='';let any=false;state.employees.forEach(emp=>{const scheduled=state.shifts.filter(s=>matchesEmployee(s,emp)&&s.date.startsWith(state.currentMonth)).length,attended=state.attendance.filter(a=>matchesEmployee(a,emp)&&a.date.startsWith(state.currentMonth)).length;if(scheduled){any=true;const rate=Math.round(attended/scheduled*100),d=document.createElement('div');d.className='flex justify-between border-b pb-2 text-sm';d.innerHTML=`<b>${emp.name}</b><span>排班 ${scheduled}／打卡 ${attended}　<b>${rate}%</b></span>`;al.appendChild(d);}});getEl('attn-stats-empty').classList.toggle('hidden',any);}
+        function renderReport(){const range=getRange(state.reportPeriod,state.currentMonth),c=calcStats(state.transactions,range.start,range.end),p=calcStats(state.transactions,range.pStart,range.pEnd);setText('report-date-range',`${range.start} ~ ${range.end}`);const sc=(id,cv,pv)=>{setText(id+'-curr',formatMoney(cv));const diff=cv-pv,pct=pv?Math.round(diff/Math.abs(pv)*100):(cv?100:0);getEl(id+'-diff').innerHTML=`<span class="${diff>=0?'text-green-600':'text-red-500'} font-bold">${diff>=0?'▲':'▼'} ${Math.abs(pct)}%</span><span class="text-stone-400 ml-1">vs 上期 ${formatMoney(pv)}</span>`;};sc('comp-inc',c.inc,p.inc);sc('comp-net',c.net,p.net);const ct=getEl('pie-chart'),ld=getEl('pie-legend');ct.innerHTML='';ld.innerHTML='';const map={};c.txs.filter(t=>t.type==='out').forEach(t=>map[t.name]=(map[t.name]||0)+Number(t.amount||0));const data=Object.entries(map).map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value);if(!data.length)ct.innerHTML='<text x="50" y="50" text-anchor="middle" fill="#ccc" font-size="10" transform="rotate(90 50 50)">無資料</text>';else{const total=data.reduce((s,x)=>s+x.value,0);let angle=0;data.forEach((x,i)=>{const pc=x.value/total,deg=pc*360,color=CONFIG.colors[i%CONFIG.colors.length],x1=50+40*Math.cos(Math.PI*angle/180),y1=50+40*Math.sin(Math.PI*angle/180),x2=50+40*Math.cos(Math.PI*(angle+deg)/180),y2=50+40*Math.sin(Math.PI*(angle+deg)/180),path=data.length===1?'M 50 50 m -40 0 a 40 40 0 1 0 80 0 a 40 40 0 1 0 -80 0':`M 50 50 L ${x1} ${y1} A 40 40 0 ${deg>180?1:0} 1 ${x2} ${y2} Z`;const pth=document.createElementNS('http://www.w3.org/2000/svg','path');pth.setAttribute('d',path);pth.setAttribute('fill',color);pth.setAttribute('stroke','#fff');ct.appendChild(pth);angle+=deg;const item=document.createElement('div');item.innerHTML=`<span class="inline-block w-2.5 h-2.5 rounded-full mr-1" style="background:${color}"></span>${x.name} ${Math.round(pc*100)}%`;ld.appendChild(item);});}const sl=getEl('stock-list');sl.innerHTML='';const items=Object.keys(c.stock);getEl('stock-empty-msg').classList.toggle('hidden',items.length>0);items.forEach(n=>{const x=c.stock[n],prev=p.stock[n]||{qty:0},d=document.createElement('div');d.className='bg-white p-3 rounded-xl flex justify-between';d.innerHTML=`<b>${n}</b><div class="text-right"><b>${x.qty} ${x.unit||''}</b><div class="text-xs text-stone-400">上期 ${prev.qty}</div></div>`;sl.appendChild(d);});const al=getEl('attn-stats-list');al.innerHTML='';let any=false;
+            state.employees.forEach(emp=>{
+                const scheduledDates=[...new Set(
+                    state.shifts
+                        .filter(s=>matchesEmployee(s,emp)&&s.date?.startsWith(state.currentMonth))
+                        .map(s=>s.date)
+                )].sort();
+
+                if(!scheduledDates.length)return;
+                any=true;
+
+                const records=state.attendance
+                    .filter(a=>matchesEmployee(a,emp)&&a.date?.startsWith(state.currentMonth))
+                    .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+
+                const firstByDate=new Map();
+                records.forEach(a=>{if(!firstByDate.has(a.date))firstByDate.set(a.date,a);});
+
+                const attendedDates=scheduledDates.filter(date=>firstByDate.has(date));
+                const attendanceRate=Math.round(attendedDates.length/scheduledDates.length*100);
+
+                const judged=attendedDates
+                    .map(date=>firstByDate.get(date))
+                    .filter(a=>a&&['準時','遲到'].includes(a.status));
+                const punctualCount=judged.filter(a=>a.status==='準時').length;
+                const punctualRate=judged.length?Math.round(punctualCount/judged.length*100):null;
+
+                const d=document.createElement('div');
+                d.className='border-b pb-3 text-sm';
+                d.innerHTML=`<div class="flex items-center justify-between gap-3"><b>${emp.name}</b><span class="text-xs text-stone-400">排班 ${scheduledDates.length} 天</span></div><div class="grid grid-cols-2 gap-2 mt-2"><div class="bg-stone-50 rounded-lg p-2 text-center"><div class="text-[10px] text-stone-400">出勤率</div><b class="text-coffee-700">${attendanceRate}%</b><div class="text-[10px] text-stone-400">${attendedDates.length}/${scheduledDates.length} 天</div></div><div class="bg-stone-50 rounded-lg p-2 text-center"><div class="text-[10px] text-stone-400">準時率</div><b class="${punctualRate===null?'text-stone-400':punctualRate>=90?'text-green-700':'text-red-600'}">${punctualRate===null?'—':punctualRate+'%'}</b><div class="text-[10px] text-stone-400">${judged.length?`${punctualCount}/${judged.length} 次`:'尚無可判定紀錄'}</div></div></div>`;
+                al.appendChild(d);
+            });
+            getEl('attn-stats-empty').classList.toggle('hidden',any);}
 
         window.migrateLegacyXinyiData = () => {
             if(!isAdmin())return;
