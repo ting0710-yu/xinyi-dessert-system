@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#6f4e37">
+    <meta name="theme-color" content="#D4AAAD">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -53,6 +53,334 @@
         .notice-card.normal { border-left-color: #3b82f6; }
         .notice-delete { position: absolute; top: 8px; right: 8px; color: #d6d3d1; padding: 4px; }
         .notice-delete:hover { color: #ef4444; }
+    
+        /* ADMIN-SOFT-NEUMORPHIC-V1 */
+        :root {
+            --soft-bg: #D4AAAD;
+            --soft-bg-deep: #C89B9F;
+            --soft-card: #F7F1EF;
+            --soft-card-2: #F2EAE8;
+            --soft-text: #655457;
+            --soft-sub: #957D82;
+            --soft-accent: #7B6065;
+            --soft-danger: #B8656C;
+            --soft-green: #5E8D6A;
+            --soft-highlight: rgba(255,255,255,.72);
+            --soft-shadow: rgba(139,100,105,.23);
+        }
+
+        body {
+            background: var(--soft-bg) !important;
+            color: var(--soft-text) !important;
+        }
+
+        .manager-header {
+            background: var(--soft-bg) !important;
+            color: var(--soft-text) !important;
+            box-shadow: none !important;
+            border-bottom: 1px solid rgba(255,255,255,.28);
+            padding-bottom: 14px !important;
+        }
+        .manager-header #app-title { color: var(--soft-text) !important; font-size: 19px; letter-spacing: .02em; }
+        .manager-header #user-summary { color: rgba(101,84,87,.72) !important; font-size: 11px; }
+        .manager-header select,
+        .manager-header input[type="month"],
+        .manager-header #store-badge {
+            background: rgba(247,241,239,.78) !important;
+            color: var(--soft-text) !important;
+            border: 0 !important;
+            border-radius: 16px !important;
+            min-height: 42px;
+            box-shadow:
+                inset 3px 3px 7px rgba(139,100,105,.13),
+                inset -3px -3px 7px rgba(255,255,255,.52);
+        }
+
+        main {
+            width: 100%;
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 16px 14px 120px !important;
+        }
+
+        #view-schedule,
+        #view-staff {
+            color: var(--soft-text);
+        }
+
+        #view-schedule > div,
+        #view-staff > div.bg-orange-50,
+        #staff-empty {
+            background: var(--soft-card) !important;
+            border: 0 !important;
+            border-radius: 28px !important;
+            box-shadow:
+                -8px -8px 18px var(--soft-highlight),
+                8px 8px 18px var(--soft-shadow) !important;
+        }
+
+        #view-schedule > div:first-child { padding: 20px !important; }
+        #view-schedule > div:last-child { padding: 18px !important; }
+        #schedule-title {
+            color: var(--soft-text) !important;
+            font-size: 21px !important;
+            letter-spacing: .01em;
+        }
+        #schedule-admin-actions {
+            gap: 9px !important;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+        #schedule-admin-actions button,
+        #view-staff > .flex.justify-end button {
+            min-height: 42px;
+            padding: 10px 15px !important;
+            border: 0 !important;
+            border-radius: 16px !important;
+            color: var(--soft-text) !important;
+            background: var(--soft-card) !important;
+            box-shadow:
+                -4px -4px 9px rgba(255,255,255,.78),
+                4px 4px 9px rgba(139,100,105,.18) !important;
+            font-size: 13px !important;
+        }
+        #schedule-admin-actions button:active,
+        #view-staff > .flex.justify-end button:active {
+            box-shadow:
+                inset 3px 3px 7px rgba(139,100,105,.16),
+                inset -3px -3px 7px rgba(255,255,255,.62) !important;
+            transform: translateY(1px);
+        }
+        #schedule-admin-actions button:nth-child(1) { color: var(--soft-danger) !important; }
+        #schedule-admin-actions button:nth-child(2) {
+            background: var(--soft-accent) !important;
+            color: #fff !important;
+            box-shadow: 5px 5px 12px rgba(111,82,87,.28), -4px -4px 10px rgba(255,255,255,.45) !important;
+        }
+        #schedule-admin-actions button:nth-child(3) { color: var(--soft-danger) !important; }
+
+        #shift-legend {
+            margin: 14px 0 10px !important;
+            gap: 8px !important;
+            font-size: 11px !important;
+            color: var(--soft-sub) !important;
+        }
+
+        .calendar-container {
+            overflow-x: auto;
+            padding: 8px 4px 14px;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(123,96,101,.35) transparent;
+        }
+        .calendar-min-width { min-width: 900px; }
+        #view-schedule .calendar-grid { gap: 9px !important; }
+        #schedule-calendar {
+            background: transparent !important;
+            border: 0 !important;
+            border-radius: 0 !important;
+            overflow: visible !important;
+        }
+        .calendar-cell {
+            min-height: 138px !important;
+            padding: 9px !important;
+            gap: 6px !important;
+            background: var(--soft-card-2) !important;
+            border: 0 !important;
+            border-radius: 18px !important;
+            overflow: visible !important;
+            box-shadow:
+                -4px -4px 9px rgba(255,255,255,.70),
+                4px 4px 10px rgba(139,100,105,.16);
+        }
+        .calendar-cell:hover {
+            transform: translateY(-1px);
+            box-shadow:
+                -5px -5px 11px rgba(255,255,255,.76),
+                6px 6px 13px rgba(139,100,105,.20);
+        }
+        .calendar-cell:active {
+            background: var(--soft-card-2) !important;
+            box-shadow:
+                inset 3px 3px 7px rgba(139,100,105,.15),
+                inset -3px -3px 7px rgba(255,255,255,.65) !important;
+        }
+        .day-number {
+            font-size: 14px !important;
+            color: var(--soft-text) !important;
+            margin-bottom: 4px !important;
+        }
+        .holiday-tag {
+            background: #F4DADB !important;
+            color: var(--soft-danger) !important;
+            border-radius: 999px !important;
+            padding: 2px 6px !important;
+        }
+        .shift-row {
+            display: flex !important;
+            align-items: center !important;
+            min-height: 30px;
+            gap: 5px !important;
+            margin-bottom: 5px !important;
+            padding: 6px 7px !important;
+            background: rgba(255,255,255,.48) !important;
+            border: 0 !important;
+            border-radius: 11px !important;
+            color: var(--soft-text) !important;
+            box-shadow:
+                inset 2px 2px 5px rgba(139,100,105,.08),
+                inset -2px -2px 5px rgba(255,255,255,.50);
+        }
+        .shift-label {
+            color: var(--soft-accent) !important;
+            font-size: 12px !important;
+        }
+        .emp-name {
+            font-size: 12px !important;
+            font-weight: 750 !important;
+            text-shadow: none !important;
+        }
+
+        #leave-list > div {
+            background: var(--soft-card-2) !important;
+            border-radius: 14px !important;
+            padding: 10px 12px !important;
+            color: var(--soft-text) !important;
+            box-shadow:
+                inset 2px 2px 5px rgba(139,100,105,.08),
+                inset -2px -2px 5px rgba(255,255,255,.48);
+        }
+
+        #view-staff > .flex.justify-end {
+            margin-bottom: 14px;
+        }
+        #view-staff > .flex.justify-end button {
+            background: var(--soft-accent) !important;
+            color: #fff !important;
+        }
+        #view-staff > div.bg-orange-50 {
+            padding: 16px !important;
+            color: var(--soft-text) !important;
+            margin-bottom: 18px !important;
+        }
+        #staff-list {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px !important;
+        }
+        #staff-list > div {
+            background: var(--soft-card) !important;
+            border: 0 !important;
+            border-radius: 24px !important;
+            padding: 18px !important;
+            box-shadow:
+                -7px -7px 16px rgba(255,255,255,.70),
+                7px 7px 16px rgba(139,100,105,.19) !important;
+        }
+        #staff-list > div .bg-stone-50 {
+            background: var(--soft-card-2) !important;
+            border-radius: 14px !important;
+            box-shadow:
+                inset 2px 2px 5px rgba(139,100,105,.08),
+                inset -2px -2px 5px rgba(255,255,255,.52);
+        }
+        #staff-list button {
+            min-width: 42px;
+            min-height: 36px;
+            border-radius: 12px !important;
+        }
+        #staff-list .text-coffee-800,
+        #staff-list .text-coffee-700 { color: var(--soft-text) !important; }
+
+        #staff-modal > div,
+        #leave-modal > div,
+        #day-modal > div,
+        #app-modal > div {
+            background: var(--soft-card) !important;
+            border: 0 !important;
+            border-radius: 28px !important;
+            box-shadow:
+                -10px -10px 24px rgba(255,255,255,.35),
+                12px 12px 28px rgba(71,45,50,.28) !important;
+        }
+        #staff-modal input,
+        #staff-modal select,
+        #leave-modal input,
+        #leave-modal select,
+        #day-modal input,
+        #day-modal select,
+        #app-modal input,
+        #app-modal textarea,
+        #app-modal select {
+            background: var(--soft-card-2) !important;
+            border: 0 !important;
+            border-radius: 14px !important;
+            min-height: 44px;
+            color: var(--soft-text) !important;
+            box-shadow:
+                inset 3px 3px 7px rgba(139,100,105,.12),
+                inset -3px -3px 7px rgba(255,255,255,.62);
+        }
+        #day-modal > div > div:first-child,
+        #day-modal > div > div:last-child,
+        #staff-modal > div > div:first-child,
+        #leave-modal > div > div:first-child {
+            background: transparent !important;
+            border-color: rgba(123,96,101,.10) !important;
+        }
+        #day-shift-list > div,
+        #day-leave-list > div {
+            background: var(--soft-card-2) !important;
+            border: 0 !important;
+            border-radius: 14px !important;
+            padding: 10px !important;
+        }
+        #day-modal button[onclick="saveDaySchedule()"],
+        #leave-modal button[onclick="saveLeave()"] {
+            background: var(--soft-accent) !important;
+            color: white !important;
+            border-radius: 14px !important;
+            min-height: 44px;
+        }
+
+        .soft-nav {
+            left: 50%;
+            transform: translateX(-50%);
+            bottom: 10px !important;
+            width: min(calc(100% - 24px), 720px) !important;
+            height: calc(68px + env(safe-area-inset-bottom)) !important;
+            background: rgba(247,241,239,.94) !important;
+            border: 0 !important;
+            border-radius: 25px !important;
+            box-shadow:
+                -7px -7px 16px rgba(255,255,255,.58),
+                8px 8px 20px rgba(111,82,87,.25) !important;
+            backdrop-filter: blur(16px);
+            overflow: hidden;
+            padding-top: 6px !important;
+        }
+        .soft-nav .nav-btn {
+            color: #A78E93 !important;
+            border-radius: 18px;
+            transition: .18s ease;
+        }
+        .soft-nav .nav-btn.text-coffee-600 {
+            color: var(--soft-accent) !important;
+            background: rgba(212,170,173,.22);
+            box-shadow:
+                inset 2px 2px 5px rgba(139,100,105,.10),
+                inset -2px -2px 5px rgba(255,255,255,.55);
+        }
+        .soft-nav .nav-btn span { font-size: 10px !important; }
+
+        @media (max-width: 760px) {
+            main { padding: 14px 12px 115px !important; }
+            #staff-list { grid-template-columns: 1fr; }
+            #view-schedule > div:first-child { padding: 16px !important; }
+            #schedule-admin-actions { width: 100%; margin-top: 10px; justify-content: flex-start; }
+            #view-schedule > div:first-child > div:first-child { align-items: flex-start !important; flex-wrap: wrap; }
+            .calendar-min-width { min-width: 850px; }
+        }
+  
     </style>
 </head>
 <body class="bg-[#f8f6f4] text-coffee-900 h-[100dvh] overflow-hidden flex flex-col">
@@ -60,7 +388,7 @@
 
     <!-- 管理端直接顯示主介面；Firebase 在背景完成匿名連線。 -->
 
-    <header class="bg-coffee-700 text-white pt-safe-top pb-3 px-4 shadow-md z-20 shrink-0">
+    <header class="manager-header bg-coffee-700 text-white pt-safe-top pb-3 px-4 shadow-md z-20 shrink-0">
         <div class="pt-2 space-y-2">
             <div class="flex justify-between items-center gap-3">
                 <div class="min-w-0">
@@ -238,8 +566,8 @@
 
         <!-- 4. Staff Tab -->
         <div id="view-staff" class="hidden fade-in space-y-4">
-            <div class="flex justify-end">
-                <button onclick="addEmployee()" class="bg-coffee-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md flex items-center gap-1">+ 新增員工</button>
+            <div class="flex items-end justify-between gap-3 flex-wrap"><div><div class="text-[11px] tracking-[0.18em] uppercase text-[#957D82] font-bold">TEAM</div><h2 class="text-[22px] font-bold text-[#655457] mt-1">員工與跨店支援</h2></div><div class="flex justify-end">
+                <button onclick="addEmployee()" class="bg-coffee-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md flex items-center gap-1">+ 新增員工</button></div>
             </div>
             <div class="bg-orange-50 border border-orange-100 p-3 rounded-xl text-xs text-coffee-700 mb-2">
                 <span class="font-bold">🎯 分店與 Google 綁定：</span>
@@ -274,7 +602,7 @@
     </main>
 
     <!-- Bottom Nav -->
-    <nav class="bg-white border-t border-stone-200 flex justify-around items-center pb-safe-bottom pt-2 h-[calc(60px+env(safe-area-inset-bottom))] shadow-top fixed bottom-0 w-full z-30">
+    <nav class="soft-nav bg-white border-t border-stone-200 flex justify-around items-center pb-safe-bottom pt-2 h-[calc(60px+env(safe-area-inset-bottom))] shadow-top fixed bottom-0 w-full z-30">
         <button onclick="switchMainTab('home')" id="nav-home" class="admin-nav nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-coffee-600"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="text-[9px] font-bold">記帳</span></button>
         <button onclick="switchMainTab('report')" id="nav-report" class="admin-nav nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg><span class="text-[9px] font-bold">報表</span></button>
         <button onclick="switchMainTab('schedule')" id="nav-schedule" class="nav-btn flex flex-col items-center gap-1 w-full h-full justify-center text-stone-400"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="text-[9px] font-bold">排班</span></button>
