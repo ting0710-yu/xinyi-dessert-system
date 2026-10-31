@@ -525,7 +525,7 @@
                 <button onclick="logoutApp()" class="hidden shrink-0 text-xs bg-coffee-800 border border-coffee-600 rounded-lg px-2.5 py-1.5">登出</button>
             </div>
             <div class="flex gap-2 items-center">
-                <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"><option value="xinyi">信義店</option><option value="ntu">台大店</option></select>
+                <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"><option value="xinyi">信義店</option><option value="ntu">台大店</option><option value="nanxi">誠品南西店</option></select>
                 <div id="store-badge" class="hidden flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-3 py-1.5 font-bold"></div>
                 <input type="month" id="month-select" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-orange-300">
             </div>
@@ -740,7 +740,7 @@
                         <input id="st-support" type="checkbox" class="mt-0.5 w-4 h-4 accent-[#6f4e37]">
                         <span>
                             <span class="block text-sm font-bold text-coffee-800">可跨店支援</span>
-                            <span id="st-support-desc" class="block text-[11px] leading-relaxed text-stone-500 mt-0.5">勾選後可在信義店與台大店排班，員工登入後也能切換兩家店班表。</span>
+                            <span id="st-support-desc" class="block text-[11px] leading-relaxed text-stone-500 mt-0.5">勾選後可在信義店、台大店與誠品南西店排班，夥伴登入後也能切換支援分店班表。</span>
                         </span>
                     </label>
                 </div>
@@ -909,6 +909,19 @@
                     { start:'14:00', end:'16:00', required:1, label:'14:00–16:00' },
                     { start:'16:00', end:'20:00', required:2, label:'16:00–20:00' }
                 ]
+            },
+            nanxi: {
+                id:'nanxi', name:'誠品南西店', rent:0, mgmt:0, fixedCost:0, defaultIncome:100000,
+                openWeekdays:[0,1,2,3,4,5,6],
+                shifts:[
+                    { name:'開店班', code:'開', startTime:'10:00', endTime:'18:30', paidHours:8.5, count:0, displayTime:'10:00–18:30' },
+                    { name:'長班（日～四）', code:'長', startTime:'11:30', endTime:'21:30', paidHours:10, count:0, displayTime:'11:30–21:30', weekdays:[0,1,2,3,4] },
+                    { name:'收店班（日～四）', code:'收', startTime:'18:30', endTime:'22:00', paidHours:3.5, count:0, displayTime:'18:30–22:00', weekdays:[0,1,2,3,4] },
+                    { name:'長班（五六）', code:'長', startTime:'11:30', endTime:'22:00', paidHours:10.5, count:0, displayTime:'11:30–22:00', weekdays:[5,6] },
+                    { name:'收店班（五六）', code:'收', startTime:'18:30', endTime:'22:30', paidHours:4, count:0, displayTime:'18:30–22:30', weekdays:[5,6] },
+                    { name:'彈性班', code:'彈', flexible:true, count:0 }
+                ],
+                coverageSlots:[]
             }
         };
 
@@ -924,7 +937,7 @@
         };
 
         let state = {
-            user:null, accessRole:'admin', employeeProfile:null, storeId:'xinyi', accessibleStoreIds:['xinyi','ntu'], unsubs:[],
+            user:null, accessRole:'admin', employeeProfile:null, storeId:'xinyi', accessibleStoreIds:['xinyi','ntu','nanxi'], unsubs:[],
             transactions:[], employees:[], leaves:[], shifts:[], attendance:[], notices:[],
             currentMonth:new Date().toISOString().slice(0,7), type:'out', view:'home', reportView:'chart', reportPeriod:'month',
             selectedDate:null, leaveMode:'single', listTab:'tx', quickEmployeeId:null, quickShiftName:null
@@ -1104,7 +1117,7 @@
             wrap.classList.toggle('opacity-50',!eligible);
             wrap.classList.toggle('bg-stone-50',!eligible);
             wrap.classList.toggle('bg-coffee-50',eligible);
-            if(desc)desc.textContent=eligible?'勾選後可在信義店與台大店排班，員工登入後也能切換兩家店班表。':'糖事人不具跨店支援資格，只能綁定主要分店。';
+            if(desc)desc.textContent=eligible?'勾選後可在信義店、台大店與誠品南西店排班，夥伴登入後也能切換支援分店班表。':'糖事人不具跨店支援資格，只能綁定主要分店。';
         };
 
         window.changeStore = async storeId => {
@@ -1164,6 +1177,11 @@
                 target.className='w-full text-center mt-1 font-bold text-[#7B6065]';
                 target.textContent='防呆人數：10–11 ×1｜11–14 ×2｜14–16 ×1｜16–20 ×2';
                 el.appendChild(target);
+            }else if(state.storeId==='nanxi'){
+                const target=document.createElement('span');
+                target.className='w-full text-center mt-1 font-bold text-[#7B6065]';
+                target.textContent='南西防呆：10–11:30 ×1｜11:30–閉店前30分 ×2｜最後30分 ×1';
+                el.appendChild(target);
             }
         }
 
@@ -1185,7 +1203,7 @@
 
             empWrap.innerHTML='';
             if(!eligible.length){
-                empWrap.innerHTML='<div class="col-span-full text-center text-xs text-stone-400 py-3">目前沒有員工，請先到「員工」新增。</div>';
+                empWrap.innerHTML='<div class="col-span-full text-center text-xs text-stone-400 py-3">目前沒有夥伴，請先到「夥伴」新增。</div>';
             }else{
                 eligible.forEach(emp=>{
                     const btn=document.createElement('button');
@@ -1203,7 +1221,7 @@
             if(hint)hint.textContent=emp?`現在直接點一個時段，就會排給 ${emp.name}。`:'先點員工，再點時段即可完成。';
 
             shiftWrap.innerHTML='';
-            currentStore().shifts.forEach(def=>{
+            getShiftDefsForDate(state.selectedDate).forEach(def=>{
                 const btn=document.createElement('button');
                 btn.type='button';
                 btn.className=`quick-shift-btn ${def.flexible?'flexible':''}`;
@@ -1255,6 +1273,24 @@
             if(!Array.isArray(weekdays)||!weekdays.length)return true;
             return weekdays.includes(new Date(dateStr+'T00:00:00').getDay());
         };
+        const getShiftDefsForDate=dateStr=>{
+            const day=dateStr?new Date(dateStr+'T00:00:00').getDay():null;
+            return currentStore().shifts.filter(def=>!Array.isArray(def.weekdays)||day===null||def.weekdays.includes(day));
+        };
+        const getCoverageSlotsForDate=dateStr=>{
+            if(state.storeId==='nanxi'){
+                const day=new Date(dateStr+'T00:00:00').getDay();
+                const friSat=day===5||day===6;
+                const dualEnd=friSat?'22:00':'21:30';
+                const close=friSat?'22:30':'22:00';
+                return[
+                    {start:'10:00',end:'11:30',required:1,label:'10:00–11:30'},
+                    {start:'11:30',end:dualEnd,required:2,label:`11:30–${dualEnd}`},
+                    {start:dualEnd,end:close,required:1,label:`${dualEnd}–${close}`}
+                ];
+            }
+            return Array.isArray(currentStore().coverageSlots)?currentStore().coverageSlots:[];
+        };
         const shiftCoversMoment=(shift,minute)=>{
             const meta=getShiftMeta(shift),start=timeToMinutes(meta.startTime),end=timeToMinutes(meta.endTime);
             if(start===null||end===null||minute<start||minute>=end)return false;
@@ -1288,8 +1324,9 @@
 
         const getScheduleCoverage=dateStr=>{
             if(!isStoreOpenDate(dateStr))return{open:false,complete:true,missing:[],pattern:null};
-            if(state.storeId==='ntu'&&Array.isArray(currentStore().coverageSlots)){
-                return evaluateCoverageSlots(dateStr,currentStore().coverageSlots);
+            const coverageSlots=getCoverageSlotsForDate(dateStr);
+            if(coverageSlots.length){
+                return evaluateCoverageSlots(dateStr,coverageSlots);
             }
             const daily=state.shifts.filter(s=>s.date===dateStr);
             const patterns=currentStore().coveragePatterns||[{label:'基本班表',shifts:currentStore().shifts.filter(s=>!s.flexible&&Number(s.count)>0).map(s=>({name:s.name,count:Number(s.count)||1}))}];
@@ -1324,9 +1361,11 @@
         };
         function renderReminderHome(){
             const rule=getEl('reminder-store-rule');
-            if(rule)rule.textContent=state.storeId==='ntu'
-                ?'台大店採「時段人數防呆」：10:00–11:00 至少 1 人；11:00–14:00 至少 2 人；14:00–16:00 至少 1 人；16:00–20:00 至少 2 人。班型可自由組合。'
-                :'信義店週一至週五：可排全班 08:00–17:00，或早班 08:00–12:00＋晚班 12:00–17:00。';
+            if(rule){
+                if(state.storeId==='ntu')rule.textContent='台大店採「時段人數防呆」：10:00–11:00 至少 1 人；11:00–14:00 至少 2 人；14:00–16:00 至少 1 人；16:00–20:00 至少 2 人。班型可自由組合。';
+                else if(state.storeId==='nanxi')rule.textContent='誠品南西店：每日 10:00 到班。週日～週四 22:00 收店、週五週六 22:30 收店；11:30 起到閉店前 30 分鐘至少 2 人，開店到 11:30 與最後 30 分鐘至少 1 人。';
+                else rule.textContent='信義店週一至週五：可排全班 08:00–17:00，或早班 08:00–12:00＋晚班 12:00–17:00。';
+            }
             const dates=getOpenDatesForMonth(),results=dates.map(date=>({date,...getScheduleCoverage(date)})),missing=results.filter(x=>!x.complete);
             setText('reminder-complete',String(results.length-missing.length));
             setText('reminder-missing',String(missing.length));
@@ -1334,7 +1373,7 @@
             list.innerHTML='';good.classList.toggle('hidden',missing.length>0);
             missing.forEach(item=>{
                 const dt=new Date(item.date+'T00:00:00'),weekday=['日','一','二','三','四','五','六'][dt.getDay()];
-                const detail=item.missing.map(m=>state.storeId==='ntu'
+                const detail=item.missing.map(m=>(state.storeId==='ntu'||state.storeId==='nanxi')
                     ?`${m.time||m.name} 少 ${m.count} 人`
                     :`${m.name} ${m.time}${m.count>1?` ×${m.count}`:''}`
                 ).join('、');
@@ -1348,7 +1387,7 @@
 
         window.simulateCheckIn = async () => {
             if(!isAdmin())return;
-            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無員工資料'});
+            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無夥伴資料'});
             const emp=state.employees[0],now=new Date(),timeStr=now.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});
             await addDoc(getCollection('attendance'),{employeeId:emp.id,name:emp.name,email:emp.email||'',date:now.toISOString().slice(0,10),time:timeStr,status:'準時',createdAt:Date.now()});
             Modal.show({type:'alert',message:`[模擬] ${emp.name} 於 ${timeStr} 打卡成功！`});
@@ -1515,7 +1554,7 @@
             const targetIds=enabling?Object.keys(STORE_CONFIG):[primaryStoreId];
             const removedIds=Object.keys(STORE_CONFIG).filter(storeId=>!targetIds.includes(storeId));
             const action=enabling?'開啟':'取消';
-            Modal.show({type:'confirm',title:`${action}跨店支援`,message:enabling?`確定讓 ${emp.name} 同時支援信義店與台大店？`:`確定取消 ${emp.name} 的跨店支援？取消後只保留主要分店「${STORE_CONFIG[primaryStoreId]?.name||primaryStoreId}」。`,onConfirm:async()=>{
+            Modal.show({type:'confirm',title:`${action}跨店支援`,message:enabling?`確定讓 ${emp.name} 支援目前所有分店（信義店、台大店、誠品南西店）？`:`確定取消 ${emp.name} 的跨店支援？取消後只保留主要分店「${STORE_CONFIG[primaryStoreId]?.name||primaryStoreId}」。`,onConfirm:async()=>{
                 if(!enabling){
                     const today=taipeiToday();
                     for(const storeId of removedIds){
@@ -1535,7 +1574,7 @@
 
         window.addLeave = () => {
             if(!isAdmin())return;
-            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無員工'});
+            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無夥伴'});
             const sel=getEl('lv-emp');sel.innerHTML='';state.employees.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.name;sel.appendChild(o);});
             populateShiftOptions();window.switchLeaveMode('single');getEl('leave-modal').classList.remove('hidden');
         };
@@ -1590,15 +1629,15 @@
 
         window.autoSchedule = () => {
             if(!isAdmin())return;
-            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無員工可排班'});
+            if(!state.employees.length)return Modal.show({type:'alert',message:'目前分店無夥伴可排班'});
             Modal.show({type:'confirm',message:`確定為 ${currentStore().name} ${state.currentMonth} 重新排班？\n舊班表會先清除；彈性／備用班型不會自動建立。`,onConfirm:async()=>{
                 for(const s of state.shifts.filter(s=>s.date.startsWith(state.currentMonth)))await deleteDoc(getDocRef('shifts',s.id));
                 const [year,month]=state.currentMonth.split('-').map(Number),days=new Date(year,month,0).getDate();let count=0;
-                const defs=currentStore().shifts.filter(s=>!s.flexible&&s.count>0);
                 const externalShifts=await loadExternalMonthShifts();
                 for(let d=1;d<=days;d++){
                     const date=`${state.currentMonth}-${String(d).padStart(2,'0')}`,daily=[];
                     if(!isStoreOpenDate(date))continue;
+                    const defs=getShiftDefsForDate(date).filter(s=>!s.flexible&&s.count>0);
                     for(const def of defs){for(let slot=0;slot<def.count;slot++){
                         const candidates=state.employees.filter(emp=>{
                             const leave=state.leaves.find(l=>matchesEmployee(l,emp)&&l.date===date&&(l.period==='all'||l.period===def.name));if(leave)return false;
@@ -1626,13 +1665,18 @@
                     coverageEl.classList.remove('hidden');
                 }else if(coverage.complete){
                     coverageEl.className='rounded-2xl p-3 text-xs leading-relaxed bg-green-50 text-green-700';
-                    coverageEl.textContent=state.storeId==='ntu'
-                        ?'✓ 人力完整：10–11 至少1人、11–14至少2人、14–16至少1人、16–20至少2人。'
-                        :'✓ 今日排班完整。';
+                    if(state.storeId==='ntu'){
+                        coverageEl.textContent='✓ 人力完整：10–11 至少1人、11–14至少2人、14–16至少1人、16–20至少2人。';
+                    }else if(state.storeId==='nanxi'){
+                        const day=new Date(date+'T00:00:00').getDay(),friSat=day===5||day===6;
+                        coverageEl.textContent=friSat
+                            ?'✓ 人力完整：10–11:30至少1人、11:30–22:00至少2人、22:00–22:30至少1人。'
+                            :'✓ 人力完整：10–11:30至少1人、11:30–21:30至少2人、21:30–22:00至少1人。';
+                    }else coverageEl.textContent='✓ 今日排班完整。';
                     coverageEl.classList.remove('hidden');
                 }else{
                     coverageEl.className='rounded-2xl p-3 text-xs leading-relaxed bg-red-50 text-red-700';
-                    const msg=coverage.missing.map(m=>state.storeId==='ntu'?`${m.time||m.name} 少 ${m.count} 人`:`${m.name} ${m.time}`).join('；');
+                    const msg=coverage.missing.map(m=>(state.storeId==='ntu'||state.storeId==='nanxi')?`${m.time||m.name} 少 ${m.count} 人`:`${m.name} ${m.time}`).join('；');
                     coverageEl.textContent=`⚠ 還缺：${msg}`;
                     coverageEl.classList.remove('hidden');
                 }
