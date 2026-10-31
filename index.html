@@ -722,7 +722,7 @@
                 <div><label class="text-xs text-stone-500 font-bold uppercase">姓名</label><input id="st-name" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50"></div>
                 <div>
                     <label class="text-xs text-stone-500 font-bold uppercase">Google Email (打卡綁定)</label>
-                    <input id="st-email" type="email" oninput="updateSupportEligibility()" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50" placeholder="example@gmail.com">
+                    <input id="st-email" type="email" class="w-full border border-stone-200 rounded-lg p-2.5 mt-1 bg-stone-50" placeholder="example@gmail.com">
                 </div>
                 <div>
                     <label class="text-xs text-stone-500 font-bold uppercase">主要分店</label>
@@ -947,9 +947,7 @@
         const setText = (id,val) => { const el=getEl(id); if(el) el.textContent=val; };
         const formatMoney = n => new Intl.NumberFormat('zh-TW',{style:'currency',currency:'TWD',maximumFractionDigits:0}).format(Number(n)||0);
         const normalizeEmail = email => String(email||'').trim().toLowerCase();
-        const NANXI_ALLOWED_EMAILS = new Set(['yguo6976@gmail.com','t10230816@gmail.com']);
-        const canUseNanxi = email => NANXI_ALLOWED_EMAILS.has(normalizeEmail(email));
-        const crossStoreIdsForEmail = email => canUseNanxi(email) ? ['xinyi','ntu','nanxi'] : ['xinyi','ntu'];
+        const NANXI_EXTRA_EMAILS = ['yguo6976@gmail.com','t10230816@gmail.com'];
         const taipeiToday = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
         const isAdmin = () => state.accessRole === 'admin';
         const validStoreIds = ids => [...new Set((Array.isArray(ids)?ids:[]).filter(id=>STORE_CONFIG[id]))];
@@ -968,6 +966,51 @@
         const getCollection = (colName, storeId=state.storeId) => collection(db,'stores',storeId,colName);
         const getDocRef = (colName,id,storeId=state.storeId) => doc(db,'stores',storeId,colName,id);
         const matchesEmployee = (record, emp) => record.employeeId ? record.employeeId===emp.id : record.name===emp.name;
+
+        async function ensureNanxiExtraAccounts() {
+            for(const email of NANXI_EXTRA_EMAILS){
+                try{
+                    const directoryRef=doc(db,'employeeDirectory',email);
+                    const directorySnap=await getDoc(directoryRef);
+                    if(!directorySnap.exists())continue;
+                    const profile=directorySnap.data();
+                    const employeeId=profile.employeeId;
+                    if(!employeeId)continue;
+
+                    const currentIds=validStoreIds(Array.isArray(profile.storeIds)?profile.storeIds:[profile.storeId||profile.primaryStoreId]);
+                    const targetIds=[...new Set([...currentIds,'nanxi'])].filter(id=>STORE_CONFIG[id]);
+                    const primaryStoreId=profile.primaryStoreId||profile.storeId||currentIds[0]||'xinyi';
+                    const sourceStore=currentIds.find(id=>id!=='nanxi')||primaryStoreId;
+
+                    let source={};
+                    if(sourceStore&&STORE_CONFIG[sourceStore]){
+                        const sourceSnap=await getDoc(doc(db,'stores',sourceStore,'employees',employeeId));
+                        if(sourceSnap.exists())source=sourceSnap.data();
+                    }
+
+                    const base={
+                        ...source,
+                        name:profile.name||source.name||email,
+                        email,
+                        primaryStoreId,
+                        storeIds:targetIds,
+                        role:profile.jobRole||source.role||'木白匠',
+                        crossStoreSupport:true,
+                        updatedAt:Date.now()
+                    };
+                    delete base.id;
+
+                    await setDoc(doc(db,'stores','nanxi','employees',employeeId),{...base,storeId:'nanxi'},{merge:true});
+                    await setDoc(directoryRef,{
+                        storeIds:targetIds,
+                        crossStoreSupport:true,
+                        updatedAt:Date.now()
+                    },{merge:true});
+                }catch(err){
+                    console.error('Nanxi extra account sync failed:',email,err);
+                }
+            }
+        }
 
         const isEmbeddedPreview = () => {
             try { return window.self !== window.top; }
@@ -1085,6 +1128,7 @@
             state.accessRole=role; state.employeeProfile=profile;
             state.accessibleStoreIds=isAdmin()?Object.keys(STORE_CONFIG):profileStoreIds(profile);
             if(!state.accessibleStoreIds.length)state.accessibleStoreIds=[storeId||'xinyi'];
+            if(isAdmin())await ensureNanxiExtraAccounts();
             populateStoreSelectors();
             applyRoleUI();
             await changeStoreInternal(storeId||state.accessibleStoreIds[0]);
@@ -1120,14 +1164,7 @@
             wrap.classList.toggle('opacity-50',!eligible);
             wrap.classList.toggle('bg-stone-50',!eligible);
             wrap.classList.toggle('bg-coffee-50',eligible);
-            if(desc){
-                const email=normalizeEmail(getEl('st-email')?.value);
-                desc.textContent=eligible
-                    ?(canUseNanxi(email)
-                        ?'此帳號可支援信義店、台大店與誠品南西店。'
-                        :'跨店支援預設為信義店＋台大店；誠品南西店目前只開放兩個指定帳號。')
-                    :'糖事人不具跨店支援資格，只能綁定主要分店。';
-            }
+            if(desc)desc.textContent=eligible?'勾選後可在信義店、台大店與誠品南西店排班，夥伴登入後也能切換支援分店班表。':'糖事人不具跨店支援資格，只能綁定主要分店。';
         };
 
         window.changeStore = async storeId => {
@@ -1457,10 +1494,9 @@
             if(!isAdmin())return;
             const name=getEl('st-name').value.trim(),email=normalizeEmail(getEl('st-email').value),primaryStoreId=getEl('st-store').value,jobRole=getEl('st-role').value;
             const crossStore=jobRole==='木白匠'&&getEl('st-support').checked;
-            const requestedStoreIds=crossStore?crossStoreIdsForEmail(email):[primaryStoreId];
+            const requestedStoreIds=crossStore?Object.keys(STORE_CONFIG):[primaryStoreId];
             if(!name)return Modal.show({type:'alert',message:'請輸入姓名'});
             if(!email||!email.includes('@'))return Modal.show({type:'alert',message:'請輸入夥伴實際使用的 Google Email'});
-            if(primaryStoreId==='nanxi'&&!canUseNanxi(email))return Modal.show({type:'alert',title:'南西權限限制',message:'目前誠品南西店只開放 yguo6976@gmail.com 與 t10230816@gmail.com 兩個帳號。'});
             if(getEl('st-support').checked&&jobRole!=='木白匠')return Modal.show({type:'alert',message:'只有木白匠具備跨店支援資格。'});
 
             const directoryRef=doc(db,'employeeDirectory',email);
@@ -1477,9 +1513,7 @@
                     return Modal.show({type:'alert',message:`此 Google Email 已綁定「${old.name||'其他員工'}／${oldStoreText}」。\n只有木白匠可以加入第二家店支援。`});
                 }
 
-                const targetStoreIds=[...new Set([...oldStoreIds,...requestedStoreIds])]
-                    .filter(id=>STORE_CONFIG[id])
-                    .filter(id=>id!=='nanxi'||canUseNanxi(email));
+                const targetStoreIds=[...new Set([...oldStoreIds,...requestedStoreIds])].filter(id=>STORE_CONFIG[id]);
                 if(targetStoreIds.length===oldStoreIds.length&&targetStoreIds.every(id=>oldStoreIds.includes(id))){
                     return Modal.show({type:'alert',message:`${old.name||name} 已經在「${oldStoreText}」的員工名單中。\n若要支援另一家店，請選擇另一分店，或勾選「可跨店支援」。`});
                 }
@@ -1564,7 +1598,7 @@
             const currentIds=employeeStoreIds(emp);
             const enabling=currentIds.length<2;
             const primaryStoreId=emp.primaryStoreId||emp.storeId||state.storeId;
-            const targetIds=enabling?crossStoreIdsForEmail(emp.email):[primaryStoreId];
+            const targetIds=enabling?Object.keys(STORE_CONFIG):[primaryStoreId];
             const removedIds=Object.keys(STORE_CONFIG).filter(storeId=>!targetIds.includes(storeId));
             const action=enabling?'開啟':'取消';
             Modal.show({type:'confirm',title:`${action}跨店支援`,message:enabling?`確定讓 ${emp.name} 支援 ${targetIds.map(x=>STORE_CONFIG[x]?.name||x).join('、')}？`:`確定取消 ${emp.name} 的跨店支援？取消後只保留主要分店「${STORE_CONFIG[primaryStoreId]?.name||primaryStoreId}」。`,onConfirm:async()=>{
