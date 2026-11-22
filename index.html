@@ -650,6 +650,23 @@
             <div class="flex items-end justify-between gap-3 flex-wrap"><div><div class="text-[11px] tracking-[0.18em] uppercase text-[#957D82] font-bold">TEAM</div><h2 class="text-[22px] font-bold text-[#655457] mt-1">員工與跨店支援</h2></div><div class="flex justify-end">
                 <button onclick="addEmployee()" class="bg-coffee-600 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-md flex items-center gap-1">+ 新增員工</button></div>
             </div>
+
+            <section class="bg-white/70 rounded-[22px] p-4 shadow-sm border border-white/50">
+                <div class="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <div class="text-[11px] tracking-[0.12em] font-bold text-[#957D82]">PAYROLL CYCLE</div>
+                        <div class="mt-1 font-bold text-[#655457]">薪資結算：每月 16 日～次月 15 日</div>
+                        <div id="payroll-range" class="mt-1 text-sm text-[#7B6065] font-bold"></div>
+                        <div id="payroll-payday" class="mt-0.5 text-xs text-[#957D82]"></div>
+                    </div>
+                    <label class="text-[11px] font-bold text-[#957D82]">
+                        結算起始月
+                        <input type="month" id="payroll-month-select" class="block mt-1 bg-[#F2EAE8] text-[#655457] rounded-xl px-3 py-2 border-0 outline-none">
+                    </label>
+                </div>
+                <div class="mt-2 text-[11px] text-[#957D82]">2026/11/15 前已自行結算；系統預設從 2026/11/16 起的新循環開始計算。</div>
+            </section>
+
             <div class="bg-orange-50 border border-orange-100 p-3 rounded-xl text-xs text-coffee-700 mb-2">
                 <span class="font-bold">🎯 分店與 Google 綁定：</span>
                 <div class="grid grid-cols-1 gap-1 mt-1 opacity-80">
@@ -939,7 +956,7 @@
         let state = {
             user:null, accessRole:'admin', employeeProfile:null, storeId:'xinyi', accessibleStoreIds:['xinyi','ntu','nanxi'], unsubs:[],
             transactions:[], employees:[], leaves:[], shifts:[], attendance:[], notices:[],
-            currentMonth:new Date().toISOString().slice(0,7), type:'out', view:'home', reportView:'chart', reportPeriod:'month',
+            currentMonth:new Date().toISOString().slice(0,7), payrollStartMonth:null, type:'out', view:'home', reportView:'chart', reportPeriod:'month',
             selectedDate:null, leaveMode:'single', listTab:'tx', quickEmployeeId:null, quickShiftName:null
         };
 
@@ -949,6 +966,30 @@
         const normalizeEmail = email => String(email||'').trim().toLowerCase();
         const NANXI_EXTRA_EMAILS = ['yguo6976@gmail.com','t10230816@gmail.com'];
         const taipeiToday = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+        const addMonthKey = (monthKey, delta=1) => {
+            const [year,month]=String(monthKey||'').split('-').map(Number);
+            if(!year||!month)return'';
+            const d=new Date(year,month-1+delta,1);
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        };
+        const getCurrentPayrollStartMonth = () => {
+            const today=taipeiToday();
+            const monthKey=today.slice(0,7);
+            return Number(today.slice(8,10))>=16?monthKey:addMonthKey(monthKey,-1);
+        };
+        const getPayrollCycle = (startMonth=state.payrollStartMonth||getCurrentPayrollStartMonth()) => {
+            const nextMonth=addMonthKey(startMonth,1);
+            return{
+                startMonth,
+                start:`${startMonth}-16`,
+                end:`${nextMonth}-15`,
+                payday:`${nextMonth}-16`
+            };
+        };
+        const formatShortDate = dateStr => {
+            const [,m,d]=String(dateStr||'').split('-');
+            return m&&d?`${Number(m)}/${Number(d)}`:dateStr;
+        };
         const isAdmin = () => state.accessRole === 'admin';
         const validStoreIds = ids => [...new Set((Array.isArray(ids)?ids:[]).filter(id=>STORE_CONFIG[id]))];
         const profileStoreIds = profile => {
@@ -1836,7 +1877,39 @@
         window.switchReportTab=v=>{state.reportView=v;['chart','stock','attn'].forEach(k=>{getEl('report-'+k).classList.toggle('hidden',k!==v);const b=getEl('subtab-'+k);b.classList.toggle('text-coffee-700',k===v);b.classList.toggle('border-coffee-600',k===v);b.classList.toggle('text-stone-400',k!==v);b.classList.toggle('border-transparent',k!==v);});};
         window.changeReportPeriod=p=>{state.reportPeriod=p;['month','quarter','half','year'].forEach(k=>{getEl('rp-'+k).className=k===p?'flex-1 py-1.5 rounded-lg text-xs font-bold bg-white text-coffee-700 shadow-sm transition-all':'flex-1 py-1.5 rounded-lg text-xs font-bold text-stone-500 transition-all';});renderReport();};
 
-        function renderStaff(){const list=getEl('staff-list');if(!list)return;list.innerHTML='';getEl('staff-empty').classList.toggle('hidden',state.employees.length>0);state.employees.forEach(e=>{const my=state.shifts.filter(s=>matchesEmployee(s,e)&&s.date.startsWith(state.currentMonth));let normal=0,holiday=0;my.forEach(s=>{const h=getShiftMeta(s).paidHours;if(HOLIDAYS[s.date])holiday+=h;else normal+=h;});const total=normal+holiday,bonus=total>=160?2000:total>=120?1500:total>=80?1000:total>=40?500:0,wage=Number(e.wage)||210,salary=normal*wage+holiday*wage*2+bonus;const d=document.createElement('div');d.className='bg-white p-4 rounded-xl shadow-sm border border-stone-100';d.innerHTML=`<div class="flex justify-between items-start mb-3"><div class="flex items-center gap-2"><span class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style="background:${e.color||'#a67c52'}">${e.name[0]}</span><div><div class="font-bold text-coffee-800 text-lg">${e.name}<span class="text-[10px] ml-2 bg-coffee-50 text-coffee-600 px-1.5 py-0.5 rounded">${employeeStoreIds(e).map(id=>STORE_CONFIG[id]?.name||id).join('＋')}</span>${employeeStoreIds(e).length>1?'<span class="text-[10px] ml-1 bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">跨店支援</span>':''}</div><div class="text-xs text-stone-500">${e.email||'未綁定 Google'}｜時薪 $${wage}</div></div></div><div class="flex items-center gap-1">${e.role==='木白匠'?`<button onclick="toggleCrossStoreSupport('${e.id}')" class="text-[10px] font-bold px-2 py-1 rounded ${employeeStoreIds(e).length>1?'bg-amber-50 text-amber-700':'bg-coffee-50 text-coffee-700'}">${employeeStoreIds(e).length>1?'取消跨店':'開啟跨店'}</button>`:''}<button onclick="deleteStaff('${e.id}')" class="text-stone-300 p-1">✕</button></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2 text-xs mb-2"><div>一般 <b class="text-coffee-700">${normal}h</b></div><div>國定假日 <b class="text-red-500">${holiday}h</b></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2"><div><div class="text-[10px] text-stone-400">激勵獎金</div><b class="text-green-600">+$${bonus}</b></div><div><div class="text-[10px] text-stone-400">預估薪資</div><b>$${salary.toLocaleString()}</b></div></div>`;list.appendChild(d);});}
+        function renderStaff(){
+            const list=getEl('staff-list');if(!list)return;
+            list.innerHTML='';
+            getEl('staff-empty').classList.toggle('hidden',state.employees.length>0);
+
+            const cycle=getPayrollCycle();
+            setText('payroll-range',`本期：${formatShortDate(cycle.start)}～${formatShortDate(cycle.end)}`);
+            setText('payroll-payday',`發薪日：${formatShortDate(cycle.payday)}（每月 16 日）`);
+            const payrollSelect=getEl('payroll-month-select');
+            if(payrollSelect&&payrollSelect.value!==cycle.startMonth)payrollSelect.value=cycle.startMonth;
+
+            state.employees.forEach(e=>{
+                const my=state.shifts.filter(s=>
+                    matchesEmployee(s,e)&&
+                    s.date&&
+                    s.date>=cycle.start&&
+                    s.date<=cycle.end
+                );
+                let normal=0,holiday=0;
+                my.forEach(s=>{
+                    const h=getShiftMeta(s).paidHours;
+                    if(HOLIDAYS[s.date])holiday+=h;else normal+=h;
+                });
+                const total=normal+holiday,
+                    bonus=total>=160?2000:total>=120?1500:total>=80?1000:total>=40?500:0,
+                    wage=Number(e.wage)||210,
+                    salary=normal*wage+holiday*wage*2+bonus;
+                const d=document.createElement('div');
+                d.className='bg-white p-4 rounded-xl shadow-sm border border-stone-100';
+                d.innerHTML=`<div class="flex justify-between items-start mb-3"><div class="flex items-center gap-2"><span class="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs" style="background:${e.color||'#a67c52'}">${e.name[0]}</span><div><div class="font-bold text-coffee-800 text-lg">${e.name}<span class="text-[10px] ml-2 bg-coffee-50 text-coffee-600 px-1.5 py-0.5 rounded">${employeeStoreIds(e).map(id=>STORE_CONFIG[id]?.name||id).join('＋')}</span>${employeeStoreIds(e).length>1?'<span class="text-[10px] ml-1 bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded">跨店支援</span>':''}</div><div class="text-xs text-stone-500">${e.email||'未綁定 Google'}｜時薪 $${wage}</div><div class="text-[10px] text-[#957D82] mt-0.5">計薪 ${formatShortDate(cycle.start)}～${formatShortDate(cycle.end)}｜${formatShortDate(cycle.payday)} 發薪</div></div></div><div class="flex items-center gap-1">${e.role==='木白匠'?`<button onclick="toggleCrossStoreSupport('${e.id}')" class="text-[10px] font-bold px-2 py-1 rounded ${employeeStoreIds(e).length>1?'bg-amber-50 text-amber-700':'bg-coffee-50 text-coffee-700'}">${employeeStoreIds(e).length>1?'取消跨店':'開啟跨店'}</button>`:''}<button onclick="deleteStaff('${e.id}')" class="text-stone-300 p-1">✕</button></div></div><div class="grid grid-cols-3 gap-2 text-center bg-stone-50 rounded-lg p-2 text-xs mb-2"><div>一般 <b class="text-coffee-700">${normal}h</b></div><div>國定假日 <b class="text-red-500">${holiday}h</b></div><div>本期 <b class="text-[#7B6065]">${total}h</b></div></div><div class="grid grid-cols-2 gap-2 text-center bg-stone-50 rounded-lg p-2"><div><div class="text-[10px] text-stone-400">激勵獎金</div><b class="text-green-600">+$${bonus}</b></div><div><div class="text-[10px] text-stone-400">預估薪資</div><b>$${salary.toLocaleString()}</b></div></div>`;
+                list.appendChild(d);
+            });
+        }
 
         function renderSchedule(){
             const cal=getEl('schedule-calendar');if(!cal)return;cal.innerHTML='';
@@ -1940,8 +2013,14 @@
         renderShiftLegend();
         populateShiftOptions();
         getEl('month-select').value=state.currentMonth;
+        state.payrollStartMonth=getCurrentPayrollStartMonth();
+        if(getEl('payroll-month-select'))getEl('payroll-month-select').value=state.payrollStartMonth;
         window.updateSupportEligibility();
         getEl('month-select').addEventListener('change',e=>{state.currentMonth=e.target.value;rerenderCurrentView();});
+        getEl('payroll-month-select')?.addEventListener('change',e=>{
+            state.payrollStartMonth=e.target.value||getCurrentPayrollStartMonth();
+            if(state.view==='staff')renderStaff();
+        });
         getEl('btn-save')?.addEventListener('click',window.addTransaction);
         getEl('btn-fixed-cost')?.addEventListener('click',window.safeAddFixedCost);
         getEl('btn-fixed-income')?.addEventListener('click',window.safeAddFixedIncome);
