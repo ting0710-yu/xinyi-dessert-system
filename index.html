@@ -511,7 +511,7 @@
     </style>
 </head>
 <body class="bg-[#f8f6f4] text-coffee-900 h-[100dvh] overflow-hidden flex flex-col">
-    <!-- BUILD: DIRECT-ADMIN-NO-LOGIN-NO-DEVICE-BINDING-20260712 -->
+    <!-- BUILD: PAYROLL-16TO15-V3-20261125 -->
 
     <!-- 管理端直接顯示主介面；Firebase 在背景完成匿名連線。 -->
 
@@ -527,7 +527,7 @@
             <div class="flex gap-2 items-center">
                 <select id="store-select" onchange="changeStore(this.value)" class="flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none"><option value="xinyi">信義店</option><option value="ntu">台大店</option><option value="nanxi">誠品南西店</option></select>
                 <div id="store-badge" class="hidden flex-1 bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-3 py-1.5 font-bold"></div>
-                <input type="month" id="month-select" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-orange-300">
+                <input type="month" id="month-select" oninput="changeMonthValue(this.value)" onchange="changeMonthValue(this.value)" class="bg-coffee-800 border border-coffee-600 text-white text-sm rounded-lg px-2 py-1.5 outline-none focus:ring-1 focus:ring-orange-300">
             </div>
         </div>
     </header>
@@ -653,7 +653,10 @@
 
             <section class="bg-white/70 rounded-[22px] p-4 shadow-sm border border-white/50">
                 <div>
-                    <div class="text-[11px] tracking-[0.12em] font-bold text-[#957D82]">PAYROLL CYCLE</div>
+                    <div class="flex items-center gap-2">
+                        <div class="text-[11px] tracking-[0.12em] font-bold text-[#957D82]">PAYROLL CYCLE</div>
+                        <span class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#E8D7D4] text-[#7B6065]">16–15 V3</span>
+                    </div>
                     <div class="mt-1 font-bold text-[#655457]">薪資月份會跟上方月份選擇連動</div>
                     <div id="payroll-range" class="mt-1 text-sm text-[#7B6065] font-bold"></div>
                     <div id="payroll-payday" class="mt-0.5 text-xs text-[#957D82]"></div>
@@ -1905,7 +1908,7 @@
 
             const cycle=getPayrollCycle(state.currentMonth);
             const [payYear,payMonth]=String(cycle.payrollMonth||'').split('-');
-            setText('payroll-range',`${payYear} 年 ${Number(payMonth)} 月薪資：${formatShortDate(cycle.start)}～${formatShortDate(cycle.end)}`);
+            setText('payroll-range',`${payYear} 年 ${Number(payMonth)} 月薪資 → ${formatShortDate(cycle.start)}～${formatShortDate(cycle.end)}`);
             setText('payroll-payday',cycle.payrollMonth>='2026-11'
                 ?`發薪日：${formatShortDate(cycle.payday)}｜${cycle.label}`
                 :`舊制計薪：${formatShortDate(cycle.start)}～${formatShortDate(cycle.end)}`);
@@ -2036,7 +2039,17 @@
         populateShiftOptions();
         getEl('month-select').value=state.currentMonth;
         window.updateSupportEligibility();
-        getEl('month-select').addEventListener('change',e=>{state.currentMonth=e.target.value;rerenderCurrentView();});
+        window.changeMonthValue=value=>{
+            if(!value||value===state.currentMonth){
+                if(state.view==='staff')renderStaff();
+                else rerenderCurrentView();
+                return;
+            }
+            state.currentMonth=value;
+            rerenderCurrentView();
+        };
+        getEl('month-select').addEventListener('input',e=>window.changeMonthValue(e.target.value));
+        getEl('month-select').addEventListener('change',e=>window.changeMonthValue(e.target.value));
         getEl('btn-save')?.addEventListener('click',window.addTransaction);
         getEl('btn-fixed-cost')?.addEventListener('click',window.safeAddFixedCost);
         getEl('btn-fixed-income')?.addEventListener('click',window.safeAddFixedIncome);
