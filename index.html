@@ -1077,6 +1077,108 @@
             }
         }
 
+        async function ensureNamedNanxiCrossStore(targetName='品臻') {
+            try{
+                let match=null;
+
+                for(const storeId of Object.keys(STORE_CONFIG)){
+                    const snap=await getDocs(collection(db,'stores',storeId,'employees'));
+                    for(const employeeDoc of snap.docs){
+                        const data=employeeDoc.data();
+                        if(String(data.name||'').trim()===targetName){
+                            match={id:employeeDoc.id,storeId,data};
+                            break;
+                        }
+                    }
+                    if(match)break;
+                }
+
+                if(!match){
+                    console.warn('Named Nanxi cross-store sync: employee not found',targetName);
+                    return false;
+                }
+
+                let employeeId=match.id;
+                const email=normalizeEmail(match.data.email||'');
+                let directoryData=null;
+
+                if(email){
+                    const directoryRef=doc(db,'employeeDirectory',email);
+                    const directorySnap=await getDoc(directoryRef);
+                    if(directorySnap.exists()){
+                        directoryData=directorySnap.data();
+                        employeeId=directoryData.employeeId||employeeId;
+                    }
+                }
+
+                const existingIds=validStoreIds([
+                    ...(Array.isArray(match.data.storeIds)?match.data.storeIds:[]),
+                    ...(Array.isArray(directoryData?.storeIds)?directoryData.storeIds:[]),
+                    match.data.primaryStoreId,
+                    match.data.storeId,
+                    directoryData?.primaryStoreId,
+                    directoryData?.storeId,
+                    match.storeId
+                ]);
+
+                const primaryStoreId=
+                    directoryData?.primaryStoreId||
+                    match.data.primaryStoreId||
+                    directoryData?.storeId||
+                    match.data.storeId||
+                    match.storeId||
+                    'xinyi';
+
+                const targetStoreIds=[...new Set([...existingIds,'nanxi'])].filter(id=>STORE_CONFIG[id]);
+
+                const base={
+                    ...match.data,
+                    name:targetName,
+                    email:email||match.data.email||'',
+                    primaryStoreId,
+                    storeIds:targetStoreIds,
+                    role:'木白匠',
+                    crossStoreSupport:true,
+                    updatedAt:Date.now()
+                };
+                delete base.id;
+
+                for(const storeId of targetStoreIds){
+                    await setDoc(
+                        doc(db,'stores',storeId,'employees',employeeId),
+                        {...base,storeId},
+                        {merge:true}
+                    );
+                }
+
+                if(email){
+                    await setDoc(
+                        doc(db,'employeeDirectory',email),
+                        {
+                            employeeId,
+                            name:targetName,
+                            email,
+                            primaryStoreId,
+                            storeId:primaryStoreId,
+                            storeIds:targetStoreIds,
+                            jobRole:'木白匠',
+                            role:'employee',
+                            crossStoreSupport:true,
+                            active:true,
+                            updatedAt:Date.now()
+                        },
+                        {merge:true}
+                    );
+                }
+
+                console.info('Named Nanxi cross-store sync complete',targetName,targetStoreIds);
+                return true;
+            }catch(err){
+                console.error('Named Nanxi cross-store sync failed:',targetName,err);
+                return false;
+            }
+        }
+
         const isEmbeddedPreview = () => {
             try { return window.self !== window.top; }
             catch (_) { return true; }
@@ -1193,7 +1295,10 @@
             state.accessRole=role; state.employeeProfile=profile;
             state.accessibleStoreIds=isAdmin()?Object.keys(STORE_CONFIG):profileStoreIds(profile);
             if(!state.accessibleStoreIds.length)state.accessibleStoreIds=[storeId||'xinyi'];
-            if(isAdmin())await ensureNanxiExtraAccounts();
+            if(isAdmin()){
+                await ensureNanxiExtraAccounts();
+                await ensureNamedNanxiCrossStore('品臻');
+            }
             populateStoreSelectors();
             applyRoleUI();
             await changeStoreInternal(storeId||state.accessibleStoreIds[0]);
