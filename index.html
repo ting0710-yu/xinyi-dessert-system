@@ -964,6 +964,7 @@
         const formatMoney = n => new Intl.NumberFormat('zh-TW',{style:'currency',currency:'TWD',maximumFractionDigits:0}).format(Number(n)||0);
         const normalizeEmail = email => String(email||'').trim().toLowerCase();
         const NANXI_EXTRA_EMAILS = ['yguo6976@gmail.com','t10230816@gmail.com'];
+        const PINZHEN_EMAIL = 'jennyhuang0403@gmail.com';
         const taipeiToday = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
         const addMonthKey = (monthKey, delta=1) => {
             const [year,month]=String(monthKey||'').split('-').map(Number);
@@ -1077,15 +1078,31 @@
             }
         }
 
-        async function ensureNamedNanxiCrossStore(targetName='品臻') {
+        async function ensureNamedNanxiCrossStore(targetName='品臻', targetEmail=PINZHEN_EMAIL) {
             try{
+                const email=normalizeEmail(targetEmail);
                 let match=null;
+                let directoryData=null;
+                let employeeId='';
 
+                if(email){
+                    const directoryRef=doc(db,'employeeDirectory',email);
+                    const directorySnap=await getDoc(directoryRef);
+                    if(directorySnap.exists()){
+                        directoryData=directorySnap.data();
+                        employeeId=directoryData.employeeId||'';
+                    }
+                }
+
+                // 優先依 Email / employeeId 找既有夥伴；找不到才退回姓名。
                 for(const storeId of Object.keys(STORE_CONFIG)){
                     const snap=await getDocs(collection(db,'stores',storeId,'employees'));
                     for(const employeeDoc of snap.docs){
                         const data=employeeDoc.data();
-                        if(String(data.name||'').trim()===targetName){
+                        const sameEmail=email && normalizeEmail(data.email||'')===email;
+                        const sameId=employeeId && employeeDoc.id===employeeId;
+                        const sameName=String(data.name||'').trim()===targetName;
+                        if(sameEmail||sameId||(!employeeId&&!email&&sameName)||(sameName&&email&&!data.email)){
                             match={id:employeeDoc.id,storeId,data};
                             break;
                         }
@@ -1093,48 +1110,47 @@
                     if(match)break;
                 }
 
-                if(!match){
-                    console.warn('Named Nanxi cross-store sync: employee not found',targetName);
-                    return false;
-                }
-
-                let employeeId=match.id;
-                const email=normalizeEmail(match.data.email||'');
-                let directoryData=null;
-
-                if(email){
-                    const directoryRef=doc(db,'employeeDirectory',email);
-                    const directorySnap=await getDoc(directoryRef);
-                    if(directorySnap.exists()){
-                        directoryData=directorySnap.data();
-                        employeeId=directoryData.employeeId||employeeId;
+                if(!employeeId&&match)employeeId=match.id;
+                if(!match&&employeeId){
+                    for(const storeId of Object.keys(STORE_CONFIG)){
+                        const employeeSnap=await getDoc(doc(db,'stores',storeId,'employees',employeeId));
+                        if(employeeSnap.exists()){
+                            match={id:employeeId,storeId,data:employeeSnap.data()};
+                            break;
+                        }
                     }
                 }
 
+                if(!employeeId&&!match){
+                    console.warn('Pinzhen Nanxi cross-store sync: employee not found',targetName,email);
+                    return false;
+                }
+
+                const sourceData=match?.data||{};
                 const existingIds=validStoreIds([
-                    ...(Array.isArray(match.data.storeIds)?match.data.storeIds:[]),
+                    ...(Array.isArray(sourceData.storeIds)?sourceData.storeIds:[]),
                     ...(Array.isArray(directoryData?.storeIds)?directoryData.storeIds:[]),
-                    match.data.primaryStoreId,
-                    match.data.storeId,
+                    sourceData.primaryStoreId,
+                    sourceData.storeId,
                     directoryData?.primaryStoreId,
                     directoryData?.storeId,
-                    match.storeId
+                    match?.storeId
                 ]);
 
                 const primaryStoreId=
                     directoryData?.primaryStoreId||
-                    match.data.primaryStoreId||
+                    sourceData.primaryStoreId||
                     directoryData?.storeId||
-                    match.data.storeId||
-                    match.storeId||
+                    sourceData.storeId||
+                    match?.storeId||
                     'xinyi';
 
                 const targetStoreIds=[...new Set([...existingIds,'nanxi'])].filter(id=>STORE_CONFIG[id]);
 
                 const base={
-                    ...match.data,
-                    name:targetName,
-                    email:email||match.data.email||'',
+                    ...sourceData,
+                    name:directoryData?.name||sourceData.name||targetName,
+                    email,
                     primaryStoreId,
                     storeIds:targetStoreIds,
                     role:'木白匠',
@@ -1151,30 +1167,28 @@
                     );
                 }
 
-                if(email){
-                    await setDoc(
-                        doc(db,'employeeDirectory',email),
-                        {
-                            employeeId,
-                            name:targetName,
-                            email,
-                            primaryStoreId,
-                            storeId:primaryStoreId,
-                            storeIds:targetStoreIds,
-                            jobRole:'木白匠',
-                            role:'employee',
-                            crossStoreSupport:true,
-                            active:true,
-                            updatedAt:Date.now()
-                        },
-                        {merge:true}
-                    );
-                }
+                await setDoc(
+                    doc(db,'employeeDirectory',email),
+                    {
+                        employeeId,
+                        name:base.name||targetName,
+                        email,
+                        primaryStoreId,
+                        storeId:primaryStoreId,
+                        storeIds:targetStoreIds,
+                        jobRole:'木白匠',
+                        role:'employee',
+                        crossStoreSupport:true,
+                        active:true,
+                        updatedAt:Date.now()
+                    },
+                    {merge:true}
+                );
 
-                console.info('Named Nanxi cross-store sync complete',targetName,targetStoreIds);
+                console.info('Pinzhen Nanxi cross-store sync complete',email,targetStoreIds);
                 return true;
             }catch(err){
-                console.error('Named Nanxi cross-store sync failed:',targetName,err);
+                console.error('Pinzhen Nanxi cross-store sync failed:',targetName,targetEmail,err);
                 return false;
             }
         }
@@ -1297,7 +1311,7 @@
             if(!state.accessibleStoreIds.length)state.accessibleStoreIds=[storeId||'xinyi'];
             if(isAdmin()){
                 await ensureNanxiExtraAccounts();
-                await ensureNamedNanxiCrossStore('品臻');
+                await ensureNamedNanxiCrossStore('品臻',PINZHEN_EMAIL);
             }
             populateStoreSelectors();
             applyRoleUI();
